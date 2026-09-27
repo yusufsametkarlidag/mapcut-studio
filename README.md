@@ -3,7 +3,7 @@
 **Haritayı ver, videoyu al.** Yüzlerce görsel, B-roll video ve avatar
 konuşmasından oluşan uzun belgesel/hikâye videolarını, tek bir zaman
 çizelgesi dosyasından (`TIMELINE_MAP.md`) **otomatik olarak** kurgulayan
-macOS masaüstü uygulaması.
+masaüstü uygulaması (macOS ve Windows).
 
 CapCut'ta 17 dakikalık bir videoya 174 görseli, 10 B-roll klibi ve 6 avatar
 bloğunu tek tek sürükleyip saniyesi saniyesine hizalamak saatler sürer.
@@ -52,8 +52,8 @@ TIMELINE_MAP.md ──► parse_timeline.py ──► edl.json (kurgu listesi)
 3. **Birleştirme.** Klipler 8'erli gruplar halinde xfade ile birleştirilir
    (macOS'un açık dosya limitine takılmamak için).
 4. **Final.** Film grain, sıcak renk tonu, hafif kamera "nefesi", altyazı ve
-   avatarın tam ses kanalı eklenir. Encode, Apple Silicon donanım
-   hızlandırmasıyla (VideoToolbox) yapılır.
+   avatarın tam ses kanalı eklenir. Encode, varsa ekran kartının donanım
+   kodlayıcısıyla yapılır (Mac'te VideoToolbox, Windows'ta NVENC / QuickSync / AMF).
 5. **Doğrulama.** Çıktının süresi harita süresiyle karşılaştırılıp rapor
    edilir.
 
@@ -79,25 +79,53 @@ TIMELINE_MAP.md ──► parse_timeline.py ──► edl.json (kurgu listesi)
 
 ## Kurulum
 
-Sadece **macOS (Apple Silicon)** üzerinde test edildi.
+Ek bir Python paketi gerekmez (sadece standart kütüphane + Tkinter).
+Altyazı için seçilen Whisper modeli ilk kullanımda otomatik indirilir
+(75 MB – 1.5 GB, bir kere).
+
+### 🍎 macOS (Apple Silicon)
 
 ```bash
 brew install python@3.10 python-tk@3.10 ffmpeg-full
 git clone https://github.com/yusufsametkarlidag/mapcut-studio.git
 ```
 
-- `ffmpeg-full` şart: normal `ffmpeg` paketinde altyazı yakma (libass) ve
-  whisper desteği yok. Uygulama doğrudan
-  `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg` yolunu kullanır.
-- Altyazı için `whisper-cpp`, `ffmpeg-full` ile birlikte gelir. Seçilen model
-  ilk kullanımda otomatik indirilir (75 MB – 1.5 GB).
-
-Ek bir Python paketi gerekmez (sadece standart kütüphane + Tkinter).
-
-## Kullanım
+`ffmpeg-full` şart: normal `ffmpeg` paketinde altyazı yakma (libass) yok.
+Altyazı için gereken `whisper-cpp` de onunla birlikte gelir. Video, Apple'ın
+donanım kodlayıcısıyla (VideoToolbox) encode edilir.
 
 **Açmak için:** Finder'da `VideoEditStudio.command` dosyasına çift tıkla
-(ilk seferde: sağ tık → Aç). Terminal'den: `python3.10 scripts/gui.py`
+(ilk seferde: sağ tık → Aç).
+
+### 🪟 Windows 10 / 11
+
+1. GitHub sayfasında yeşil **Code → Download ZIP** ile projeyi indir ve
+   bir klasöre çıkar (örn. `Masaüstü\mapcut-studio`).
+2. `kurulum_windows.bat` dosyasına çift tıkla. Bu dosya şunları kurar:
+   - Python 3.12
+   - ffmpeg (tam sürüm)
+   - altyazı için whisper.cpp (proje içindeki `tools\whisper` klasörüne)
+
+   Sadece ilk seferde gerekir.
+3. Kurulum bitince pencereyi kapat. Artık **`MapCut Studio.bat`** dosyasına
+   çift tıklayarak uygulamayı açabilirsin. Arkada açılan siyah pencereyi
+   kapatma; uygulama çalıştığı sürece açık kalmalı.
+
+Windows'ta encoder otomatik seçilir. NVIDIA, Intel ya da AMD ekran kartı
+varsa onun donanım kodlayıcısı kullanılır (NVENC / QuickSync / AMF), hiçbiri
+yoksa işlemciyle (libx264) encode edilir. İşlemciyle encode daha yavaştır ama
+sonuç aynıdır.
+
+> Windows'ta SmartScreen "Windows bilgisayarınızı korudu" derse:
+> **Ek bilgi → Yine de çalıştır**.
+
+### Gelişmiş: araçları elle seçmek
+
+Uygulama ffmpeg'i ve whisper'ı kendisi bulur. Farklı bir kurulum kullanmak
+istersen şu ortam değişkenleriyle elle belirtebilirsin: `MAPCUT_FFMPEG`,
+`MAPCUT_FFPROBE`, `MAPCUT_WHISPER`, `MAPCUT_ENCODER` (örn. `libx264`).
+
+## Kullanım
 
 1. **Proje Klasörü Seç / Oluştur.** Her video için ayrı bir klasör. Gerekli
    alt klasörler (`avatar/`, `videolar/`, `gorseller/`, `assets/`, `output/`)
@@ -142,7 +170,8 @@ Her stil Hafif / Orta / Güçlü yoğunlukla ölçeklenir.
 
 ## Komut satırından kullanım
 
-Arayüz olmadan da çalıştırılabilir. Otomasyon ya da toplu render için:
+Arayüz olmadan da çalıştırılabilir. Otomasyon ya da toplu render için
+(Windows'ta `python3.10` yerine `py` yaz):
 
 ```bash
 python3.10 scripts/parse_timeline.py --project-dir ~/Videolar/proje1
@@ -157,12 +186,15 @@ Tüm seçenekler için: `python3.10 scripts/render.py --help`
 ## Proje yapısı
 
 ```
-VideoEditStudio.command   # çift tıkla → arayüzü açar
+VideoEditStudio.command   # macOS: çift tıkla → arayüzü açar
+MapCut Studio.bat         # Windows: çift tıkla → arayüzü açar
+kurulum_windows.bat       # Windows: tek seferlik kurulum
 scripts/
   gui.py                  # Tkinter masaüstü arayüzü
   parse_timeline.py       # TIMELINE_MAP.md → edl.json
   render.py               # 3 aşamalı ffmpeg render motoru
   captions.py             # whisper.cpp → karaoke tarzı .ass altyazı
+  platform_tools.py       # ffmpeg / whisper / encoder'ı işletim sistemine göre bulur
 ```
 
 Bir video projesi klasörü (bu repoya dahil **değil**) şöyle görünür:

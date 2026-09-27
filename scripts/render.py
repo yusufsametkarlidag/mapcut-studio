@@ -9,7 +9,7 @@ calisir (--project-dir), proje klasorunde su alt klasorleri bekler:
   output/   (render ciktisi buraya yazilir)
 
 3 asama:
-  A) Normalize  - her kaynak 1920x1080/30fps/h264(videotoolbox) tekil klip
+  A) Normalize  - her kaynak 1920x1080/30fps/h264 (donanim encoder'i) tekil klip
                    haline getirilir. Crossfade'in "yediği" süreyi telafi
                    etmek icin son klip haric her klibin kuyruguna
                    +crossfade kadar ekstra kare eklenir.
@@ -37,10 +37,12 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 import captions as captions_mod  # noqa: E402
 
-# ffmpeg-full: standart 'ffmpeg' formulunde olmayan libass/freetype/zoompan/
-# loudnorm/whisper destegi burada var. Tum pipeline bu ikiliyi kullanir.
-FFMPEG_BIN = "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg"
-FFPROBE_BIN = "/opt/homebrew/opt/ffmpeg-full/bin/ffprobe"
+# ffmpeg/ffprobe yolu ve video encoder'i platforma gore platform_tools'ta
+# secilir (macOS: Homebrew ffmpeg-full + VideoToolbox; Windows: PATH/tools
+# altindaki ffmpeg + NVENC/QSV/AMF ya da libx264).
+from platform_tools import (  # noqa: E402
+    NO_WINDOW, TEXT_KW, ffmpeg_bin, ffprobe_bin, video_encode_args, video_encoder,
+)
 
 WIDTH, HEIGHT, FPS = 1920, 1080, 30
 SCALE_CROP_FPS = (
@@ -82,7 +84,8 @@ def run(cmd, quiet=True):
         cmd,
         stdout=subprocess.PIPE if quiet else None,
         stderr=subprocess.STDOUT if quiet else None,
-        text=True,
+        creationflags=NO_WINDOW,
+        **TEXT_KW,
     )
     if result.returncode != 0:
         print(f"\nHATA: komut başarısız oldu:\n{' '.join(cmd)}\n", file=sys.stderr)
@@ -93,10 +96,11 @@ def run(cmd, quiet=True):
 
 def ffprobe_duration(path: Path) -> float:
     cmd = [
-        FFPROBE_BIN, "-v", "error", "-show_entries", "format=duration",
+        ffprobe_bin(), "-v", "error", "-show_entries", "format=duration",
         "-of", "default=noprint_wrappers=1:nokey=1", str(path),
     ]
-    out = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    out = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         creationflags=NO_WINDOW, **TEXT_KW)
     return float(out.stdout.strip())
 
 
@@ -249,12 +253,12 @@ def stage_a_normalize(clips, crossfade, work_dir: Path, avatar_path: Path,
             if pad_dur > 0.001:
                 vf += f",tpad=stop_mode=clone:stop_duration={pad_dur}"
             cmd = [
-                FFMPEG_BIN, "-y", "-nostdin",
+                ffmpeg_bin(), "-y", "-nostdin",
                 "-ss", str(clip["source_in"]),
                 "-to", str(to_point),
                 "-i", str(avatar_path),
                 "-an", "-vf", vf,
-                "-c:v", "h264_videotoolbox", "-b:v", SEG_BITRATE,
+                *video_encode_args(SEG_BITRATE),
                 str(out_path),
             ]
         elif clip["kind"] == "video":
@@ -277,7 +281,7 @@ def stage_a_normalize(clips, crossfade, work_dir: Path, avatar_path: Path,
             if pad_dur > 0.001:
                 vf += f",tpad=stop_mode=clone:stop_duration={pad_dur}"
             cmd = [
-                FFMPEG_BIN, "-y", "-nostdin",
+                ffmpeg_bin(), "-y", "-nostdin",
                 # -t burada GIRIS secenegi olarak -i'den once duruyor (kaynagi
                 # trim_dur ile sinirlar). -i'den SONRA olsaydi CIKIS secenegi
                 # olurdu ve tpad'in eklecegi ekstra kareleri sessizce keserdi
@@ -285,7 +289,7 @@ def stage_a_normalize(clips, crossfade, work_dir: Path, avatar_path: Path,
                 # kaliyor, xfade payi hicbir zaman gercekten eklenmiyordu).
                 "-t", str(trim_dur), "-i", str(clip["path"]),
                 "-an", "-vf", vf,
-                "-c:v", "h264_videotoolbox", "-b:v", SEG_BITRATE,
+                *video_encode_args(SEG_BITRATE),
                 str(out_path),
             ]
         elif clip["kind"] == "image":
@@ -296,11 +300,11 @@ def stage_a_normalize(clips, crossfade, work_dir: Path, avatar_path: Path,
                 vf = SCALE_CROP_FPS
             image_counter += 1
             cmd = [
-                FFMPEG_BIN, "-y", "-nostdin",
+                ffmpeg_bin(), "-y", "-nostdin",
                 "-loop", "1", "-t", str(total_dur),
                 "-i", str(clip["path"]),
                 "-an", "-vf", vf,
-                "-c:v", "h264_videotoolbox", "-b:v", SEG_BITRATE,
+                *video_encode_args(SEG_BITRATE),
                 str(out_path),
             ]
         else:
@@ -361,11 +365,11 @@ def _merge_batch(batch, crossfade, work_dir: Path, name: str, transition_types):
         prev_label = out_label
 
     cmd = [
-        FFMPEG_BIN, "-y", "-nostdin",
+        ffmpeg_bin(), "-y", "-nostdin",
         *inputs,
         "-filter_complex", ";".join(filter_lines),
         "-map", "[vout]",
-        "-c:v", "h264_videotoolbox", "-b:v", SEG_BITRATE,
+        *video_encode_args(SEG_BITRATE),
         str(out_path),
     ]
     run(cmd)
@@ -457,7 +461,7 @@ def stage_c_finalize(concat_path: Path, total_duration: float, effects: bool,
         vf += (f",drawbox=x=0:y=0:w=iw:h=ih*{r}:color=black:t=fill"
                f",drawbox=x=0:y=ih-ih*{r}:w=iw:h=ih*{r}:color=black:t=fill")
     if captions_ass is not None:
-        esc = _escape_filter_path(str(captions_ass))
+        esc = _escape_filter_path(captions_ass.as_posix())
         vf += f",subtitles=filename='{esc}'"
 
     af = "anull"
@@ -473,12 +477,12 @@ def stage_c_finalize(concat_path: Path, total_duration: float, effects: bool,
           f"ses: avatar.mp4 0:00→{fmt_ts(total_duration)}")
     t0 = time.time()
     cmd = [
-        FFMPEG_BIN, "-y", "-nostdin",
+        ffmpeg_bin(), "-y", "-nostdin",
         "-i", str(concat_path),
         "-ss", "0", "-t", str(total_duration), "-i", str(avatar_path),
         "-filter_complex", f"[0:v]{vf}[v];[1:a]{af}[a]",
         "-map", "[v]", "-map", "[a]",
-        "-c:v", "h264_videotoolbox", "-b:v", FINAL_BITRATE,
+        *video_encode_args(FINAL_BITRATE),
         "-maxrate", FINAL_MAXRATE, "-bufsize", FINAL_BUFSIZE,
         "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
@@ -511,7 +515,7 @@ def render(project_dir: Path, edl_path: Path = None, until_row=None, until_secon
     output_dir = project_dir / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print("\n[Aşama A] Kaynaklar normalize ediliyor (1920x1080/30fps/h264 videotoolbox)...")
+    print(f"\n[Aşama A] Kaynaklar normalize ediliyor (1920x1080/30fps/h264, encoder: {video_encoder()})...")
     seg_paths = stage_a_normalize(clips, crossfade, work_dir, avatar_path,
                                    kenburns=kenburns, progress_cb=progress_cb)
 
@@ -526,7 +530,7 @@ def render(project_dir: Path, edl_path: Path = None, until_row=None, until_secon
         margin_v = LETTERBOX_CAPTION_MARGIN_V if letterbox else 170
         captions_ass = captions_mod.generate_captions(
             avatar_path, 0.0, target_duration, work_dir,
-            caption_model, caption_lang, FFMPEG_BIN,
+            caption_model, caption_lang, ffmpeg_bin(),
             video_w=WIDTH, video_h=HEIGHT, margin_v=margin_v, log=print,
         )
 

@@ -6,17 +6,21 @@ Otomatik altyazi uretimi: ses -> whisper.cpp (kelime zaman damgali JSON)
 Kelime kelime vurgulu (CapCut/TikTok tarzi) altyazi: metin beyaz + kalin
 siyah kontur, o an konusulan kelime sariya doner.
 
-whisper.cpp (whisper-cli) ve ggml model dosyasi ffmpeg-full kurulumuyla
-birlikte /opt/homebrew/opt/whisper-cpp altina kuruludur.
+whisper.cpp (whisper-cli) yolu ve model klasoru platform_tools'ta bulunur
+(macOS: Homebrew whisper-cpp; Windows: tools/whisper/ altindaki whisper-cli.exe).
 """
 import json
 import re
 import subprocess
 import sys
+import urllib.request
 from pathlib import Path
 
-WHISPER_BIN = Path("/opt/homebrew/opt/whisper-cpp/bin/whisper-cli")
-MODEL_DIR = Path("/opt/homebrew/opt/whisper-cpp/share/whisper-cpp/models")
+from platform_tools import (  # noqa: E402
+    IS_MAC, NO_WINDOW, TEXT_KW, ffmpeg_bin, whisper_bin, whisper_model_dir,
+)
+
+MODEL_DIR = whisper_model_dir()
 MODEL_URLS = {
     "tiny.en": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
     "base.en": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
@@ -44,10 +48,9 @@ def ensure_model(model_name: str, log=print) -> Path:
         raise ValueError(f"Bilinmeyen model: {model_name}. Seçenekler: {list(MODEL_URLS)}")
     log(f"  Whisper modeli indiriliyor ({model_name}, ilk kullanımda bir kere)...")
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        ["curl", "-sL", "-o", str(model_path), MODEL_URLS[model_name]],
-        check=True,
-    )
+    tmp_path = model_path.with_suffix(".part")
+    urllib.request.urlretrieve(MODEL_URLS[model_name], tmp_path)
+    tmp_path.replace(model_path)
     return model_path
 
 
@@ -58,18 +61,21 @@ def extract_audio_wav(source_video: Path, out_wav: Path, start: float, duration:
         "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
         str(out_wav),
     ]
-    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True, text=True)
+    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=True,
+                   creationflags=NO_WINDOW, **TEXT_KW)
 
 
 def transcribe_words(wav_path: Path, model_path: Path, language: str, work_dir: Path):
-    if not WHISPER_BIN.exists():
+    whisper = whisper_bin()
+    if whisper is None or not whisper.exists():
         raise RuntimeError(
-            f"whisper-cli bulunamadı: {WHISPER_BIN}\n"
-            "Kurulum için: brew install ffmpeg-full"
+            "whisper-cli bulunamadı.\n"
+            + ("Kurulum için: brew install ffmpeg-full" if IS_MAC else
+               "Kurulum için: kurulum_windows.bat dosyasını çalıştır")
         )
     out_stem = work_dir / "captions_raw"
     cmd = [
-        str(WHISPER_BIN),
+        str(whisper),
         "-m", str(model_path),
         "-f", str(wav_path),
         "-l", language,
@@ -77,7 +83,8 @@ def transcribe_words(wav_path: Path, model_path: Path, language: str, work_dir: 
         "-oj", "-of", str(out_stem),
         "-np",
     ]
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            creationflags=NO_WINDOW, **TEXT_KW)
     if result.returncode != 0:
         raise RuntimeError(f"whisper-cli başarısız oldu:\n{result.stdout[-3000:]}")
 
@@ -204,5 +211,5 @@ if __name__ == "__main__":
     start = float(sys.argv[2]) if len(sys.argv) > 2 else 0.0
     duration = float(sys.argv[3]) if len(sys.argv) > 3 else 30.0
     out = generate_captions(src, start, duration, Path("./captions_test_work"),
-                             "small.en", "en", "ffmpeg")
+                             "small.en", "en", ffmpeg_bin())
     print("ASS:", out)

@@ -18,6 +18,7 @@ yaparken kod duzenlemene gerek kalmadan:
 Calistirma:
   python3 gui.py
 """
+import os
 import queue
 import re
 import shutil
@@ -32,10 +33,13 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 import parse_timeline  # noqa: E402
 import render as render_mod  # noqa: E402
+from platform_tools import IS_MAC, IS_WINDOWS, NO_WINDOW, reveal_in_file_manager  # noqa: E402
 
 IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".PNG", ".JPG", ".JPEG")
 VIDEO_EXTS = (".mp4", ".mov", ".MP4", ".MOV")
 SUBFOLDERS = ["avatar", "videolar", "gorseller", "assets", "output"]
+MONO_FONT = "Menlo" if IS_MAC else ("Consolas" if IS_WINDOWS else "Monospace")
+FILE_MANAGER = "Finder" if IS_MAC else ("Gezgin" if IS_WINDOWS else "Klasör")
 
 PROGRESS_RE = re.compile(r"\[(\d+)/(\d+)\]")
 REPORT_LINE_RE = re.compile(r"^(Çıktı dosyası|Hedef süre|Gerçek süre|Fark|Klip sayısı)\s*:\s*(.+)$")
@@ -189,7 +193,7 @@ class VideoEditStudio(tk.Tk):
         self.test_btn.grid(row=1, column=0, padx=8, pady=6)
         self.full_btn = ttk.Button(run, text="Tam Render", command=self.run_full_render)
         self.full_btn.grid(row=1, column=1, padx=8, pady=6)
-        self.reveal_btn = ttk.Button(run, text="Çıktıyı Finder'da Göster",
+        self.reveal_btn = ttk.Button(run, text=f"Çıktıyı {FILE_MANAGER}'da Göster",
                                       command=self.reveal_output, state="disabled")
         self.reveal_btn.grid(row=1, column=2, padx=8, pady=6)
 
@@ -200,7 +204,7 @@ class VideoEditStudio(tk.Tk):
 
         log_frame = ttk.LabelFrame(self, text="Günlük")
         log_frame.pack(fill="both", expand=True, **pad)
-        self.log_text = tk.Text(log_frame, height=16, font=("Menlo", 11), wrap="word")
+        self.log_text = tk.Text(log_frame, height=16, font=(MONO_FONT, 11 if IS_MAC else 10), wrap="word")
         self.log_text.pack(side="left", fill="both", expand=True)
         scroll = ttk.Scrollbar(log_frame, command=self.log_text.yview)
         scroll.pack(side="right", fill="y")
@@ -480,8 +484,10 @@ class VideoEditStudio(tk.Tk):
     def _render_worker(self, cmd):
         report_lines = {}
         try:
+            env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                     text=True, bufsize=1)
+                                     text=True, encoding="utf-8", errors="replace",
+                                     bufsize=1, env=env, creationflags=NO_WINDOW)
             for line in proc.stdout:
                 line = line.rstrip("\n")
                 self.log_queue.put(("log", line))
@@ -501,7 +507,7 @@ class VideoEditStudio(tk.Tk):
     def reveal_output(self):
         path = self.last_report.get("out_path")
         if path and Path(path).exists():
-            subprocess.run(["open", "-R", str(path)])
+            reveal_in_file_manager(path)
 
     # --------------------------------------------------------------- loop ---
     def _poll_queue(self):
