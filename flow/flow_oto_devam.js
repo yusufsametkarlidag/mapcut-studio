@@ -2,7 +2,7 @@
 // Sayfanin sag altinda kucuk bir durum paneli acar (Durdur dugmesiyle).
 // Tarayicinin icinde calisir; Claude/API kullanmaz.
 (() => {
-  if (window.__flowOto) { window.__flowOto.stop("Yeniden başlatıldı"); }
+  if (window.__flowOto) { window.__flowOto.stop("Yeniden başlatıldı"); window.__flowOto.panel?.remove(); }
 
   const CFG = {
     devamMesaji: "Onaylıyorum, sıradaki partı oluştur. Her görselin adı Görsel #numara olsun. Partı bitirince yine onayımı bekle.",
@@ -42,15 +42,17 @@
 
   const failedCount = () => (mainText().match(/Maalesef bu görüntü üretilemedi/g) || []).length;
   // Sadece gorsel kartlarinin etiketleri ("Görsel #12" yazan tek basina ogeler) sayilir;
-  // sohbetteki "Görsel #8–#21" gibi metinler sayilmaz.
+  // sohbetteki "Görsel #8–#21" gibi metinler sayilmaz. Flow ekran disindaki kartlari
+  // sayfadan kaldirdigi (sanal kaydirma) icin gorulen numaralar zamanla biriktirilir;
+  // bu sayi yaklasiktir, kesin kontrol indirmeden sonra check_assets.py ile yapilir.
+  const seen = new Set();
   const imageNumbers = () => {
-    const nums = new Set();
     for (const e of $$("main *")) {
       if (e.children.length) continue;
       const m = (e.textContent || "").trim().match(/^Görsel #(\d+)$/);
-      if (m) nums.add(+m[1]);
+      if (m) seen.add(+m[1]);
     }
-    return nums;
+    return seen;
   };
 
   function isBusy() {
@@ -83,6 +85,7 @@
   // ---- ana dongu ----
   let running = true, calm = 0, sent = 0, retriesThisPart = 0, failedBaseline = failedCount(), parts = 0;
   const api = window.__flowOto = {
+    panel,
     stop(reason = "Durduruldu") { running = false; setMsg(reason, "#e53935"); stopBtn.textContent = "Kapat"; stopBtn.onclick = () => panel.remove(); },
   };
   stopBtn.onclick = () => api.stop();
@@ -91,9 +94,7 @@
     while (running) {
       const nums = imageNumbers();
       const max = nums.size ? Math.max(...nums) : 0;
-      const missing = []; for (let n = 1; n <= max; n++) if (!nums.has(n)) missing.push(n);
-      setInfo(`Görsel: ${nums.size} (en büyük #${max})` + (missing.length ? ` • eksik: #${missing.slice(0, 8).join(", #")}${missing.length > 8 ? "…" : ""}` : "") +
-              ` • gönderilen onay: ${sent}`);
+      setInfo(`Görülen görsel: ${nums.size} (en büyük #${max}) • gönderilen onay: ${sent}`);
 
       if (isBusy()) { calm = 0; setMsg("Ajan çalışıyor, bekleniyor…", "#fbc02d"); await sleep(CFG.kontrolAraligiMs); continue; }
       calm++;
@@ -109,8 +110,8 @@
         setMsg("Part bitti, onay veriliyor…");
         if (await send(CFG.devamMesaji)) { sent++; parts++; retriesThisPart = 0; failedBaseline = failedCount(); }
       } else {
-        api.stop(`Bitti: ajan artık onay istemiyor. ${nums.size} görsel, en büyük #${max}` +
-                 (missing.length ? `, eksik: #${missing.join(", #")}` : ", eksik yok") + ".");
+        api.stop(`Bitti: ajan artık onay istemiyor. En büyük görsel #${max}. ` +
+                 "İndirip kontrol etmeyi unutma.");
         break;
       }
       if (sent >= CFG.maxMesaj) { api.stop("Güvenlik sınırına ulaşıldı (çok fazla mesaj). Kontrol et."); break; }
