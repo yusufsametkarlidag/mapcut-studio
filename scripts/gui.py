@@ -31,6 +31,7 @@ from tkinter import filedialog, messagebox, ttk
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS_DIR))
+import check_assets  # noqa: E402
 import parse_timeline  # noqa: E402
 import render as render_mod  # noqa: E402
 from platform_tools import IS_MAC, IS_WINDOWS, NO_WINDOW, reveal_in_file_manager  # noqa: E402
@@ -307,6 +308,23 @@ class VideoEditStudio(tk.Tk):
         self.avatar_label.config(text=f"avatar.mp4: {dest.name} ✓")
         self._log(f"avatar.mp4 hazır: {dest}")
 
+    def _confirm_numbering(self, files, expected, noun):
+        """Eksik / cift / numarasiz dosya varsa ayrintili uyarir; devam edilecekse True."""
+        problems = check_assets.check_numbering(files, expected)
+        if expected is not None and len(files) != expected:
+            problems.insert(0, f"TIMELINE_MAP.md'ye göre {expected} {noun} bekleniyor, klasörde {len(files)} dosya var.")
+        if not problems:
+            self._log(f"Kontrol: {len(files)} {noun}, hepsi numaralı, eksik/çift yok ✓")
+            return True
+        for pr in problems:
+            self._log(f"  ⚠️ {pr}")
+        return messagebox.askyesno(
+            "Dosyalarda sorun var",
+            "\n\n".join("• " + pr for pr in problems)
+            + "\n\nBu haliyle devam edilirse sıralama kayabilir. Yine de devam edilsin mi?",
+            icon="warning", default="no",
+        )
+
     def choose_videos(self):
         if not self._require_project():
             return
@@ -322,13 +340,8 @@ class VideoEditStudio(tk.Tk):
             return
 
         expected = self.edl["summary"]["video_segments"] if self.edl else None
-        if expected is not None and len(files) != expected:
-            if not messagebox.askyesno(
-                "Sayı uyuşmuyor",
-                f"TIMELINE_MAP.md'ye göre {expected} adet B-roll video bekleniyor, "
-                f"ama seçilen klasörde {len(files)} dosya var.\nYine de devam edilsin mi?"
-            ):
-                return
+        if not self._confirm_numbering(files, expected, "B-roll video"):
+            return
 
         dest_dir = self.project_dir / "videolar"
         for old in dest_dir.glob("V*.mp4"):
@@ -362,13 +375,8 @@ class VideoEditStudio(tk.Tk):
             return
 
         expected = self.edl["summary"]["total_images"] if self.edl else None
-        if expected is not None and len(files) != expected:
-            if not messagebox.askyesno(
-                "Sayı uyuşmuyor",
-                f"TIMELINE_MAP.md'ye göre {expected} adet görsel bekleniyor, "
-                f"ama seçilen klasörde {len(files)} dosya var.\nYine de devam edilsin mi?"
-            ):
-                return
+        if not self._confirm_numbering(files, expected, "görsel"):
+            return
 
         dest_dir = self.project_dir / "gorseller"
         for old in list(dest_dir.glob("gorsel_*.png")) + list(dest_dir.glob("gorsel_*.jpg")) + \
