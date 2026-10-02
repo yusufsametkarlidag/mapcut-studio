@@ -12,6 +12,7 @@ Dosya numarasi, dosya adindaki ILK sayidir:
 Kullanim:
     python3 check_assets.py <klasor> --expected 159
     python3 check_assets.py <klasor> --project-dir /path/to/proje   (beklenen sayi edl.json'dan)
+    python3 check_assets.py <klasor> --map /path/to/TIMELINE_MAP.md   (beklenen sayi haritadan)
 """
 import argparse
 import json
@@ -86,12 +87,17 @@ def main():
     ap.add_argument("folder")
     ap.add_argument("--expected", type=int, default=None)
     ap.add_argument("--project-dir", default=None, help="beklenen sayiyi <proje>/edl.json'dan al")
+    ap.add_argument("--map", default=None, help="beklenen sayiyi TIMELINE_MAP.md'den al")
     ap.add_argument("--videos", action="store_true", help="gorsel yerine video klasoru kontrol et")
     args = ap.parse_args()
 
     folder = Path(args.folder)
     files = list_media(folder, VIDEO_EXTS if args.videos else IMAGE_EXTS)
     expected = args.expected
+    if expected is None and args.map:
+        import parse_timeline
+        summary = parse_timeline.build_edl(Path(args.map))["summary"]
+        expected = summary["video_segments" if args.videos else "total_images"]
     if expected is None and args.project_dir:
         summary = json.loads((Path(args.project_dir) / "edl.json").read_text(encoding="utf-8"))["summary"]
         expected = summary["video_segments" if args.videos else "total_images"]
