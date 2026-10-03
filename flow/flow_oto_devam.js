@@ -10,8 +10,17 @@
     kontrolAraligiMs: 5000,   // her 5 saniyede bir bak
     sakinKontrol: 3,          // ajan 3 kontrol ust uste bostaysa (15 sn) part bitmis say
     partBasinaMaxTekrar: 2,   // bir partta en fazla 2 kez "basarisizlari yeniden uret" de
+    maxHataTekrar: 3,         // ajan "Bir hata oluştu" derse ust uste en fazla 3 kez "Tekrar dene"ye bas
     maxMesaj: 60,             // guvenlik: toplamda en fazla bu kadar mesaj gonder
+    // Flow video uretiminden once "X kredi karsiliginda ... Onayla / Reddet" diye sorar.
+    // false: durup kullanicinin "Onayla"ya basmasini bekler (kullanici basinca devam eder).
+    // true : "Onayla"ya kendisi basar (kredi harcar).
+    krediOnayiOtomatik: false,
+    maxKrediOnayi: 10,        // otomatik modda en fazla bu kadar kredi onayi ver
   };
+  // Video asamasi gibi farkli kullanimlar icin mesajlar disaridan degistirilebilir:
+  //   window.FLOW_OTO_CFG = { devamMesaji: "...", tekrarMesaji: "..." }
+  Object.assign(CFG, window.FLOW_OTO_CFG || {});
 
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -40,7 +49,9 @@
   const editor = () => $$(".ProseMirror").find(e => e.offsetParent);
   const mainText = () => ($("main")?.innerText || "");
 
-  const failedCount = () => (mainText().match(/Maalesef bu görüntü üretilemedi/g) || []).length;
+  const failedCount = () => (mainText().match(/Maalesef bu \S+ üretilemedi/g) || []).length; // görüntü / video
+  // Politika reddi (ör. "tanınmış kişilerle ilgili içerik") yeniden denenmez; sadece bildirilir.
+  const policyCount = () => (mainText().match(/politikalarımızı ihlal/g) || []).length;
   // Sadece gorsel kartlarinin etiketleri ("Görsel #12" yazan tek basina ogeler) sayilir;
   // sohbetteki "Görsel #8–#21" gibi metinler sayilmaz. Flow ekran disindaki kartlari
   // sayfadan kaldirdigi (sanal kaydirma) icin gorulen numaralar zamanla biriktirilir;
@@ -83,6 +94,7 @@
   }
 
   // ---- ana dongu ----
+  let errorRetries = 0, creditApprovals = 0;
   let running = true, calm = 0, sent = 0, retriesThisPart = 0, failedBaseline = failedCount(), parts = 0;
   const api = window.__flowOto = {
     panel,
@@ -94,7 +106,9 @@
     while (running) {
       const nums = imageNumbers();
       const max = nums.size ? Math.max(...nums) : 0;
-      setInfo(`Görülen görsel: ${nums.size} (en büyük #${max}) • gönderilen onay: ${sent}`);
+      const pol = policyCount();
+      setInfo(`Görülen görsel: ${nums.size} (en büyük #${max}) • gönderilen onay: ${sent}` +
+              (pol ? ` • ⚠️ politika nedeniyle reddedilen: ${pol}` : ""));
 
       if (isBusy()) { calm = 0; setMsg("Ajan çalışıyor, bekleniyor…", "#fbc02d"); await sleep(CFG.kontrolAraligiMs); continue; }
       calm++;
@@ -103,14 +117,38 @@
       const lastText = lastRow().innerText;
       const failedNow = failedCount();
 
-      if (failedNow > failedBaseline && retriesThisPart < CFG.partBasinaMaxTekrar) {
+      // Kredi onayi: son ajan mesajinda "Onayla" dugmesi varsa yaziyla cevap verilmez
+      // (Flow'da bu secenekler <button> degil, role="radio" olan .option-row ogeleri)
+      const approveBtn = $$('[role="radio"], button', lastRow()).find(b => /^\s*(check\s*)?Onayla\s*$/.test(b.innerText));
+      if (approveBtn) {
+        const soru = lastText.split("\n")[0].slice(0, 120);
+        if (CFG.krediOnayiOtomatik && creditApprovals < CFG.maxKrediOnayi) {
+          setMsg(`Kredi onayı veriliyor: ${soru}`, "#fb8c00");
+          approveBtn.click(); creditApprovals++;
+        } else {
+          setMsg(`Kredi onayı bekleniyor — Flow'da "Onayla"ya sen bas, sonra devam ederim. (${soru})`, "#42a5f5");
+          calm = 0; await sleep(CFG.kontrolAraligiMs); continue;
+        }
+      } else if (/Bir hata oluştu/.test(lastText)) {
+        // Flow ajaninin kendi hatasi: mesajin altindaki "Tekrar dene" dugmesine bas
+        const retryBtn = $$("button", lastRow()).find(b => /Tekrar dene/.test(b.innerText));
+        if (errorRetries < CFG.maxHataTekrar && retryBtn) {
+          setMsg(`Flow hata verdi, tekrar deneniyor (${errorRetries + 1}/${CFG.maxHataTekrar})…`, "#fb8c00");
+          retryBtn.click(); errorRetries++;
+        } else if (errorRetries < CFG.maxHataTekrar && await send(CFG.devamMesaji)) {
+          setMsg("Flow hata verdi, devam mesajı yeniden gönderildi…", "#fb8c00"); errorRetries++; sent++;
+        } else {
+          api.stop("Flow üst üste hata verdi. Sayfayı kontrol et."); break;
+        }
+      } else if (failedNow > failedBaseline && retriesThisPart < CFG.partBasinaMaxTekrar) {
         setMsg("Başarısız görsel var, yeniden ürettiriliyor…", "#fb8c00");
         if (await send(CFG.tekrarMesaji)) { sent++; retriesThisPart++; failedBaseline = failedNow; }
       } else if (/onay|bekliyorum|devam edeyim|devam etmemi|geçeyim|geçmemi|ister misiniz/i.test(lastText)) {
         setMsg("Part bitti, onay veriliyor…");
-        if (await send(CFG.devamMesaji)) { sent++; parts++; retriesThisPart = 0; failedBaseline = failedCount(); }
+        if (await send(CFG.devamMesaji)) { sent++; parts++; retriesThisPart = 0; errorRetries = 0; failedBaseline = failedCount(); }
       } else {
         api.stop(`Bitti: ajan artık onay istemiyor. En büyük görsel #${max}. ` +
+                 (pol ? `⚠️ ${pol} üretim Flow politikası nedeniyle reddedildi, bunları elle yenilemen gerekir. ` : "") +
                  "İndirip kontrol etmeyi unutma.");
         break;
       }

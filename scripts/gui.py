@@ -79,6 +79,8 @@ class VideoEditStudio(tk.Tk):
         self.project_label.grid(row=0, column=0, sticky="w", padx=8, pady=6)
         ttk.Button(proj, text="Proje Klasörü Seç / Oluştur", command=self.choose_project)\
             .grid(row=0, column=1, padx=8, pady=6)
+        ttk.Button(proj, text="Flow Asistanı…", command=self.open_flow_assistant)\
+            .grid(row=0, column=2, padx=8, pady=6)
 
         self.md_label = ttk.Label(proj, text="TIMELINE_MAP.md: -")
         self.md_label.grid(row=1, column=0, sticky="w", padx=8, pady=2)
@@ -227,6 +229,13 @@ class VideoEditStudio(tk.Tk):
         for w in (self.test_btn, self.full_btn):
             w.configure(state=state)
 
+    def open_flow_assistant(self):
+        import flow_gui
+        if getattr(self, "_flow_win", None) and self._flow_win.winfo_exists():
+            self._flow_win.lift()
+            return
+        self._flow_win = flow_gui.FlowAssistant(self)
+
     # ------------------------------------------------------------ project ---
     def choose_project(self):
         path = filedialog.askdirectory(title="Proje klasörünü seç (yeni klasör de oluşturabilirsin)")
@@ -254,6 +263,11 @@ class VideoEditStudio(tk.Tk):
         path = filedialog.askopenfilename(title="TIMELINE_MAP.md dosyasını seç",
                                            filetypes=[("Markdown", "*.md"), ("Tüm dosyalar", "*.*")])
         if not path:
+            return
+        self.load_md(path)
+
+    def load_md(self, path):
+        if not self._require_project():
             return
         dest = self.project_dir / "TIMELINE_MAP.md"
         try:
@@ -325,10 +339,10 @@ class VideoEditStudio(tk.Tk):
             icon="warning", default="no",
         )
 
-    def choose_videos(self):
+    def choose_videos(self, folder=None, on_done=None):
         if not self._require_project():
             return
-        folder = filedialog.askdirectory(title="B-roll videolarının olduğu klasörü seç")
+        folder = folder or filedialog.askdirectory(title="B-roll videolarının olduğu klasörü seç")
         if not folder:
             return
         files = sorted(
@@ -352,7 +366,7 @@ class VideoEditStudio(tk.Tk):
                 dest = dest_dir / f"V{i}.mp4"
                 shutil.copy(f, dest)
         self._log(f"{len(files)} video kopyalanıyor (sıra: dosya adındaki numaraya göre)...")
-        self._run_bg(do_copy, on_done=lambda _: self._after_videos_copied(files))
+        self._run_bg(do_copy, on_done=lambda _: (self._after_videos_copied(files), on_done and on_done()))
 
     def _after_videos_copied(self, files):
         self.video_label.config(text=f"B-roll videolar: {len(files)} dosya (V1..V{len(files)}) ✓")
@@ -360,10 +374,10 @@ class VideoEditStudio(tk.Tk):
         for i, f in enumerate(files, start=1):
             self._log(f"    V{i}.mp4  <-  {f.name}")
 
-    def choose_images(self):
+    def choose_images(self, folder=None, on_done=None):
         if not self._require_project():
             return
-        folder = filedialog.askdirectory(title="Görsellerin olduğu klasörü seç")
+        folder = folder or filedialog.askdirectory(title="Görsellerin olduğu klasörü seç")
         if not folder:
             return
         files = sorted(
@@ -389,7 +403,7 @@ class VideoEditStudio(tk.Tk):
                 dest = dest_dir / f"gorsel_{i:03d}{ext}"
                 shutil.copy(f, dest)
         self._log(f"{len(files)} görsel kopyalanıyor (sıra: dosya adındaki numaraya göre)...")
-        self._run_bg(do_copy, on_done=lambda _: self._after_images_copied(files))
+        self._run_bg(do_copy, on_done=lambda _: (self._after_images_copied(files), on_done and on_done()))
 
     def _after_images_copied(self, files):
         self.image_label.config(text=f"Görseller: {len(files)} dosya (gorsel_001..{len(files):03d}) ✓")
