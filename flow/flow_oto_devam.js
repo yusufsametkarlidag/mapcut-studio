@@ -12,6 +12,13 @@
     partBasinaMaxTekrar: 2,   // bir partta en fazla 2 kez "basarisizlari yeniden uret" de
     maxHataTekrar: 3,         // ajan "Bir hata oluştu" derse ust uste en fazla 3 kez "Tekrar dene"ye bas
     maxMesaj: 60,             // guvenlik: toplamda en fazla bu kadar mesaj gonder
+    // Flow "tanınmış kişilerle ilgili içerik" politikasiyla reddederse ayni istemi zorlamak yerine
+    // sahne, tanınabilir yüz göstermeden (arkadan / siluet / eller) yeniden yorumlatilir.
+    politikaMesaji: "Bu adımda bazı üretimler tanınmış kişi politikası nedeniyle reddedildi. Reddedilenleri aynı adla, " +
+      "gerçek bir kişiye benzeyen hiçbir yüz göstermeden yeniden oluştur: kişiler sadece arkadan, siluet halinde veya " +
+      "omuz üstünden görünsün ya da yalnızca eller ve nesneler yakın planda olsun; tanınabilir yüz, saç stili veya imza " +
+      "kostüm olmasın. Sahnenin anlamı aynı kalsın. Sonra onayımı bekle.",
+    partBasinaMaxPolitika: 1, // bir adimda en fazla 1 kez yuzsuz yeniden yorumlama iste
     // Flow video uretiminden once "X kredi karsiliginda ... Onayla / Reddet" diye sorar.
     // false: durup kullanicinin "Onayla"ya basmasini bekler (kullanici basinca devam eder).
     // true : "Onayla"ya kendisi basar (kredi harcar).
@@ -94,7 +101,7 @@
   }
 
   // ---- ana dongu ----
-  let errorRetries = 0, creditApprovals = 0;
+  let errorRetries = 0, creditApprovals = 0, policyRetries = 0, policyBaseline = policyCount();
   let running = true, calm = 0, sent = 0, retriesThisPart = 0, failedBaseline = failedCount(), parts = 0;
   const api = window.__flowOto = {
     panel,
@@ -140,12 +147,22 @@
         } else {
           api.stop("Flow üst üste hata verdi. Sayfayı kontrol et."); break;
         }
+      } else if (policyCount() > policyBaseline) {
+        // Yeni politika reddi: once yuzsuz yeniden yorumlat, olmazsa dur (devam etme)
+        if (policyRetries < CFG.partBasinaMaxPolitika) {
+          setMsg("Bazı üretimler ünlü kişi politikasına takıldı; yüzsüz olarak yeniden ürettiriliyor…", "#fb8c00");
+          if (await send(CFG.politikaMesaji)) { sent++; policyRetries++; policyBaseline = policyCount(); }
+        } else {
+          api.stop("Bazı üretimler yüzsüz denemeye rağmen politika nedeniyle reddedildi. " +
+                   "Flow'da 'Başarısız' kartlara bakıp bu sahneleri elle değiştir."); break;
+        }
       } else if (failedNow > failedBaseline && retriesThisPart < CFG.partBasinaMaxTekrar) {
         setMsg("Başarısız görsel var, yeniden ürettiriliyor…", "#fb8c00");
         if (await send(CFG.tekrarMesaji)) { sent++; retriesThisPart++; failedBaseline = failedNow; }
       } else if (/onay|bekliyorum|devam edeyim|devam etmemi|geçeyim|geçmemi|ister misiniz/i.test(lastText)) {
         setMsg("Part bitti, onay veriliyor…");
-        if (await send(CFG.devamMesaji)) { sent++; parts++; retriesThisPart = 0; errorRetries = 0; failedBaseline = failedCount(); }
+        if (await send(CFG.devamMesaji)) { sent++; parts++; retriesThisPart = 0; errorRetries = 0; policyRetries = 0;
+                                            failedBaseline = failedCount(); policyBaseline = policyCount(); }
       } else {
         api.stop(`Bitti: ajan artık onay istemiyor. En büyük görsel #${max}. ` +
                  (pol ? `⚠️ ${pol} üretim Flow politikası nedeniyle reddedildi, bunları elle yenilemen gerekir. ` : "") +
