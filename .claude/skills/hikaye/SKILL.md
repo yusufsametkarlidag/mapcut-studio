@@ -5,6 +5,13 @@ description: Yeni bir video için hikâye aşamasını uçtan uca yürütür —
 
 # /hikaye — fikirden kontrol edilmiş haritaya
 
+> ⚠️ **Kullanım koşulları uyarısı:** HeyGen'in kullanım koşulları bot/otomasyon yazılımıyla erişimi açıkça
+> yasaklar; Anthropic'in tüketici koşulları claude.ai'ye API dışında otomatik erişimi kısıtlar; Google'ın
+> koşulları da servislerin kötüye kullanımını yasaklar. Bu yetenek bu sitelerde senin hesabınla, senin
+> tarayıcında işlem yapar — **kullanmak tamamen kullanıcının kendi sorumluluğundadır** ve hesap kısıtlaması
+> riski taşır. Otomasyonu yalnızca kendi isteğinle, düşük hacimde kullan; herhangi bir uyarı/kısıtlama
+> görürsen bırak ve o adımları elle yap. Resmi alternatifler: HeyGen API, Anthropic API.
+
 Bu yetenek MapCut Studio (VideoEditStudio) projesinin parçasıdır. Uygulamanın kullanıcıya özel
 ayarları `ayarlar.json` dosyasındadır; **hiçbir kanal/proje adını varsayma, her şeyi ayarlardan oku.**
 Tarayıcı işleri Claude in Chrome araçlarıyla yapılır (VS Code'da mesajda `@browser` gerekir).

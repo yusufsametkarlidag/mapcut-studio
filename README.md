@@ -79,6 +79,11 @@ Intel (QuickSync) veya AMD (AMF), hiçbiri yoksa işlemci (libx264).
 **Claude in Chrome** eklentisi gerekir. Normal bir Claude aboneliği yeterlidir. Kullanmak istemeyen
 hikâye aşamasını eskisi gibi elle yapar; uygulamanın geri kalanı aynen çalışır.
 
+> ⚠️ `/hikaye` ve Flow otomatik devam betiği, üçüncü taraf sitelerde (claude.ai, HeyGen, Google Flow)
+> **senin hesabınla** işlem yapar. Bu servislerin kullanım koşulları otomasyonu kısıtlayabilir (HeyGen'inki
+> açıkça yasaklar). Bu araçları kullanmak **kendi sorumluluğundadır**; düşük hacimde kullan ve bir uyarı
+> görürsen bırak. Uygulamanın çekirdeği (harita, kontroller, render) bu servislere bağlı değildir.
+
 ---
 
 ## İlk ayarlar
