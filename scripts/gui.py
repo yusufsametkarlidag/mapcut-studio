@@ -79,7 +79,7 @@ class VideoEditStudio(tk.Tk):
         self.project_label.grid(row=0, column=0, sticky="w", padx=8, pady=6)
         ttk.Button(proj, text="Proje Klasörü Seç / Oluştur", command=self.choose_project)\
             .grid(row=0, column=1, padx=8, pady=6)
-        ttk.Button(proj, text="Flow Asistanı…", command=self.open_flow_assistant)\
+        ttk.Button(proj, text="Video Asistanı…", command=self.open_flow_assistant)\
             .grid(row=0, column=2, padx=8, pady=6)
 
         self.md_label = ttk.Label(proj, text="TIMELINE_MAP.md: -")
@@ -307,16 +307,17 @@ class VideoEditStudio(tk.Tk):
                    f"{s['video_segments']} video, {s['avatar_segments']} avatar bloğu")
 
     # ------------------------------------------------------------ sources ---
-    def choose_avatar(self):
+    def choose_avatar(self, path=None, on_done=None):
         if not self._require_project():
             return
-        path = filedialog.askopenfilename(title="avatar.mp4 dosyasını seç",
-                                           filetypes=[("Video", "*.mp4 *.mov"), ("Tüm dosyalar", "*.*")])
+        path = path or filedialog.askopenfilename(title="avatar.mp4 dosyasını seç",
+                                                  filetypes=[("Video", "*.mp4 *.mov"), ("Tüm dosyalar", "*.*")])
         if not path:
             return
         dest = self.project_dir / "avatar" / "avatar.mp4"
         self._log(f"avatar.mp4 kopyalanıyor... ({path})")
-        self._run_bg(lambda: shutil.copy(path, dest), on_done=lambda _: self._after_avatar_copied(dest))
+        self._run_bg(lambda: shutil.copy(path, dest),
+                     on_done=lambda _: (self._after_avatar_copied(dest), on_done and on_done()))
 
     def _after_avatar_copied(self, dest):
         self.avatar_label.config(text=f"avatar.mp4: {dest.name} ✓")
