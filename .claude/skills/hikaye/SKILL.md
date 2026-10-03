@@ -13,11 +13,15 @@ Ayrıntılı ekran notları (hangi düğme nerede, bilinen tuzaklar):
 - `.claude/skills/hikaye/claude_ai_notlar.md`
 - `.claude/skills/hikaye/heygen_notlar.md`
 
+**İşletim sistemi farkları:** macOS'ta pano `pbcopy` / `pbpaste`, kısayol **Cmd**; Windows'ta (PowerShell)
+`Get-Clipboard` / `Set-Clipboard`, kısayol **Ctrl** (ör. Cmd+V yerine Ctrl+V). İndirilenler: `~/Downloads`
+(Windows'ta `%USERPROFILE%\Downloads`).
+
 Yardımcı komutlar (`P` = Python 3.10+; macOS'ta `/opt/homebrew/bin/python3.10`, Windows'ta `py`):
 ```
 P scripts/settings.py                                  # ayarları göster
 P scripts/story_tools.py yeni-klasor                   # sıradaki vidN klasörü → yolunu yazar
-pbpaste | P scripts/story_tools.py kaydet <vid> <ad>   # panodaki metni kaydet (Windows: Get-Clipboard |)
+pbpaste | P scripts/story_tools.py kaydet <vid> <ad>   # panodaki metni kaydet (Windows: Get-Clipboard -Raw | py …)
 P scripts/story_tools.py avatar <vid> <indirilen.mp4>  # avatar.mp4 + süre (DK / SN)
 P scripts/story_tools.py harita-mesaji <vid>           # harita isteme mesajı (süre dolu)
 P scripts/story_tools.py kontrol <harita.md> <vid>     # haritayı kontrol et
@@ -52,7 +56,8 @@ P scripts/story_tools.py kontrol <harita.md> <vid>     # haritayı kontrol et
 2. Avatar `heygen.avatar` değilse: avatar adına tıkla → **Choose Avatar** → My Avatars → ara → seç.
    Ses `heygen.ses` ile uyuşmuyorsa kullanıcıya söyle.
 3. **Motion Engine**'i her seferinde `heygen.motion_engine`'e (Avatar III) al — editör Avatar IV'e dönüyor.
-4. Scripti **yazma**: `pbcopy < <vid>/SCRIPT.txt`, "Type your script…" satırına tıkla, **Cmd+V**
+4. Scripti **yazma**: `pbcopy < <vid>/SCRIPT.txt` (Windows: `Get-Content -Raw <vid>\SCRIPT.txt | Set-Clipboard`),
+   "Type your script…" satırına tıkla, **Cmd+V / Ctrl+V**
    ("Script Writer" düğmesine tıklama). Generate aktifleşmeli.
 5. **Generate** → Title: `<vidN> — <video başlığı>`; 1080p / MP4 / Watermark Off.
    Submit'ten hemen önce Motion Engine düğmesinin `heygen.motion_engine` yazdığını doğrula.

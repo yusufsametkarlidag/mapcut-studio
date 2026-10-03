@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# MapCut Studio — Copyright (c) 2026 yusufsametkarlidag. PolyForm Noncommercial 1.0.0 lisanslıdır: ticari kullanım yasaktır. Ayrıntı: LICENSE.md
 """
 Google Flow ile gorsel/video uretim akisi icin yardimcilar:
   - TIMELINE_MAP.md'den Flow ajanina verilecek mesajlari hazirlar

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# MapCut Studio — Copyright (c) 2026 yusufsametkarlidag. PolyForm Noncommercial 1.0.0 lisanslıdır: ticari kullanım yasaktır. Ayrıntı: LICENSE.md
 """
 edl.json -> output/*.mp4 render pipeline. Herhangi bir proje klasoru icin
 calisir (--project-dir), proje klasorunde su alt klasorleri bekler:

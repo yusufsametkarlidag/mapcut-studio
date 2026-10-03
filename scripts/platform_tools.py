@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# MapCut Studio — Copyright (c) 2026 yusufsametkarlidag. PolyForm Noncommercial 1.0.0 lisanslıdır: ticari kullanım yasaktır. Ayrıntı: LICENSE.md
 """
 Platforma ozel araclarin (ffmpeg, ffprobe, whisper-cli, video encoder,
 dosya yoneticisi) tek yerden bulunmasi. macOS'ta eskisi gibi Homebrew

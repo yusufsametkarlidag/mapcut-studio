@@ -1,226 +1,228 @@
 # 🎬 MapCut Studio
 
-**Haritayı ver, videoyu al.** Yüzlerce görsel, B-roll video ve avatar
-konuşmasından oluşan uzun belgesel/hikâye videolarını, tek bir zaman
-çizelgesi dosyasından (`TIMELINE_MAP.md`) **otomatik olarak** kurgulayan
-masaüstü uygulaması (macOS ve Windows).
+**Fikirden bitmiş videoya.** Anlatımlı belgesel/hikâye videoları (avatar seslendirme + yüzlerce görsel +
+sinematik B-roll) için uçtan uca üretim aracı. **macOS ve Windows**'ta çalışır.
 
-CapCut'ta 17 dakikalık bir videoya 174 görseli, 10 B-roll klibi ve 6 avatar
-bloğunu tek tek sürükleyip saniyesi saniyesine hizalamak saatler sürer.
-MapCut Studio bunu tek tuşla yapar: geçişleri, Ken Burns hareketini, film
-efektini, ses normalizasyonunu ve kelime kelime vurgulu altyazıyı da ekler.
+> ⚖️ **Lisans:** [PolyForm Noncommercial 1.0.0](LICENSE.md) — kişisel ve ticari olmayan kullanım
+> **ücretsiz ve serbesttir**. **Ticari kullanım, satış veya ücretli hizmet olarak sunmak yasaktır.**
+> Ticari kullanım izni için proje sahibiyle iletişime geçin. Ayrıntılar: [Lisans](#️-lisans-ve-kullanım-koşulları).
 
 ---
 
-## Ne işe yarar?
+## İçindekiler
+- [Ne yapar?](#ne-yapar)
+- [Kurulum](#kurulum) — [macOS](#-macos) · [Windows](#-windows-10--11)
+- [İlk ayarlar](#ilk-ayarlar)
+- [Adım adım kullanım](#adım-adım-kullanım)
+- [Zaman haritası formatı](#zaman-haritası-formatı)
+- [Dosya adlandırma kuralları](#dosya-adlandırma-kuralları)
+- [Render ayarları](#render-ayarları)
+- [Komut satırı](#komut-satırı)
+- [Proje yapısı](#proje-yapısı)
+- [Lisans ve kullanım koşulları](#️-lisans-ve-kullanım-koşulları)
 
-YouTube tarzı "anlatımlı hikâye" videoları genelde şu parçalardan oluşur:
+---
 
-| Parça | Açıklama |
-|---|---|
-| **Avatar** (`avatar.mp4`) | Tüm seslendirmeyi içeren konuşan kafa videosu. Videonun **sesi baştan sona buradan** gelir. |
-| **B-roll videolar** (`V1…Vn`) | 5 saniyelik sinematik atmosfer klipleri (Kling, Runway, Luma, Flow vb.). |
-| **Görseller** (`#1…#n`) | Hikâyeyi anlatan sabit görseller (Midjourney, FLUX, Flow vb.). |
-| **Zaman haritası** (`TIMELINE_MAP.md`) | Hangi saniyede ne görüneceğini söyleyen tablo. |
+## Ne yapar?
 
-MapCut Studio bu parçaları alır, haritadaki tabloya göre **birebir aynı
-saniyelere** yerleştirir ve bitmiş bir `.mp4` üretir. Avatar sadece haritada
-yazan aralıklarda ekranda görünür; diğer zamanlarda görsel/video akarken
-avatarın sesi arkada devam eder.
+Bir video dört aşamada üretilir; MapCut Studio her aşamayı ya otomatikleştirir ya da kolaylaştırır:
 
-## Nasıl çalışır?
+| Aşama | Ne olur | MapCut Studio'nun katkısı |
+|---|---|---|
+| **1. Hikâye** | Fikir → başlık, açıklama, script → avatar seslendirmesi (HeyGen) → zaman haritası | **/hikaye** (Claude Code ile, opsiyonel): claude.ai sohbetinden 3 fikir ister, seçtirir, paketi ve scripti alır, HeyGen'de avatarı üretip indirir, haritayı aldırıp **kontrol eder** |
+| **2. Görseller** | Haritadaki ~150–170 görsel promptu Google Flow'da üretilir | Flow mesajını hazırlar; **otomatik devam** betiği her partı kendisi onaylar, başarısızları yeniden ürettirir, adları düzeltir; indirilen zip'i **doğru numaralarla** klasöre koyar ve eksikleri söyler |
+| **3. Videolar** | 10 adet 5 saniyelik B-roll klip | Aynı sistem; sesler otomatik silinir |
+| **4. Render** | Hepsi saniyesi saniyesine kurgulanır | Crossfade, Ken Burns hareketi, film efekti, ses normalizasyonu, kelime kelime altyazı; tek tuş |
+
+Elle yapıldığında saatler süren hizalama ve takip işi, birkaç tıklamaya iner.
 
 ```
-TIMELINE_MAP.md ──► parse_timeline.py ──► edl.json (kurgu listesi)
-                                             │
-  avatar.mp4 + videolar/ + gorseller/ ──────►│
-                                             ▼
-                                        render.py
-          A) Normalize  : her parça 1920×1080 / 30fps klibe çevrilir
-                          (görsellere Ken Burns kaydırma eklenir)
-          B) Birleştir  : klipler crossfade geçişleriyle zincirlenir
-          C) Final      : efekt + altyazı + avatar sesi (loudnorm) → .mp4
+ claude.ai ──► script ──► HeyGen ──► avatar.mp4 ──► claude.ai ──► TIMELINE_MAP.md
+                                                                    │
+                    Google Flow ◄── görsel/video promptları ◄───────┘
+                         │
+                         ▼
+          görseller/  +  videolar/  +  avatar.mp4  ──►  MapCut render  ──►  final.mp4
 ```
 
-1. **Harita okunur.** `parse_timeline.py`, markdown dosyasındaki
-   `## 4. TIMELINE ENTEGRASYON PLANI` tablosunu okur ve her satırı bir
-   kurgu adımına çevirir. Zamanlarda boşluk ya da çakışma varsa, ya da süreler
-   tutmuyorsa render'a başlamadan hata verir.
-2. **Parçalar hazırlanır.** Her görsel, video ve avatar bloğu aynı
-   çözünürlükte ayrı bir klibe dönüştürülür. Geçişlerin "yediği" süre her
-   klibe önceden eklenir, böylece crossfade'ler zamanlamayı kaydırmaz.
-3. **Birleştirme.** Klipler 8'erli gruplar halinde xfade ile birleştirilir
-   (macOS'un açık dosya limitine takılmamak için).
-4. **Final.** Film grain, sıcak renk tonu, hafif kamera "nefesi", altyazı ve
-   avatarın tam ses kanalı eklenir. Encode, varsa ekran kartının donanım
-   kodlayıcısıyla yapılır (Mac'te VideoToolbox, Windows'ta NVENC / QuickSync / AMF).
-5. **Doğrulama.** Çıktının süresi harita süresiyle karşılaştırılıp rapor
-   edilir.
-
-### Zaman haritası formatı
-
-`TIMELINE_MAP.md` içinde şu başlık ve tablo bulunmalı:
-
-```markdown
-## 4. TIMELINE ENTEGRASYON PLANI
-
-| Sıra | Zaman | Süre | İçerik |
-|---|---|---|---|
-| 1 | 0:00 – 0:20 | 20s | **A1 (Avatar)** — Açılış |
-| 2 | 0:20 – 0:35 | 15s | Görsel #1 → #3 (Giriş kurulumu) |
-| 3 | 0:35 – 0:40 | 5s  | **V1** (Yağmurlu sokak) |
-| 4 | 0:40 – 2:55 | 135s | Görsel #4 → #30 (...) |
-```
-
-- `**A1 (Avatar)**` → avatar.mp4'ün **aynı zaman aralığı** ekrana gelir.
-- `**V1**` → `videolar/V1.mp4`
-- `Görsel #4 → #30` → bu görseller satırın süresine eşit bölünerek sırayla
-  gösterilir (135 sn / 27 görsel = her biri 5 sn).
+---
 
 ## Kurulum
 
-Ek bir Python paketi gerekmez (sadece standart kütüphane + Tkinter).
-Altyazı için seçilen Whisper modeli ilk kullanımda otomatik indirilir
-(75 MB – 1.5 GB, bir kere).
+Uygulamanın kendisi ücretsizdir. Kullandığı servisler (Claude, HeyGen, Google Flow) kendi
+abonelikleriyle çalışır; MapCut Studio bunlar için **ekstra API ücreti gerektirmez**.
 
-### 🍎 macOS (Apple Silicon)
+### 🍎 macOS
 
 ```bash
 brew install python@3.10 python-tk@3.10 ffmpeg-full
 git clone https://github.com/yusufsametkarlidag/mapcut-studio.git
 ```
 
-`ffmpeg-full` şart: normal `ffmpeg` paketinde altyazı yakma (libass) yok.
-Altyazı için gereken `whisper-cpp` de onunla birlikte gelir. Video, Apple'ın
-donanım kodlayıcısıyla (VideoToolbox) encode edilir.
-
-**Açmak için:** Finder'da `VideoEditStudio.command` dosyasına çift tıkla
-(ilk seferde: sağ tık → Aç).
+- `ffmpeg-full` şarttır (normal `ffmpeg`'te altyazı yakma yok). Altyazı için gereken `whisper-cpp` onunla gelir.
+- **Açmak için:** Finder'da `VideoEditStudio.command` dosyasına çift tıkla (ilk seferde: sağ tık → Aç).
 
 ### 🪟 Windows 10 / 11
 
-1. GitHub sayfasında yeşil **Code → Download ZIP** ile projeyi indir ve
-   bir klasöre çıkar (örn. `Masaüstü\mapcut-studio`).
-2. `kurulum_windows.bat` dosyasına çift tıkla. Bu dosya şunları kurar:
-   - Python 3.12
-   - ffmpeg (tam sürüm)
-   - altyazı için whisper.cpp (proje içindeki `tools\whisper` klasörüne)
+1. GitHub sayfasında **Code → Download ZIP** → bir klasöre çıkar.
+2. **`kurulum_windows.bat`**'a çift tıkla — Python, ffmpeg ve altyazı için whisper.cpp kurulur (bir kere).
+3. **`MapCut Studio.bat`** ile aç. Arkadaki siyah pencereyi kapatma.
 
-   Sadece ilk seferde gerekir.
-3. Kurulum bitince pencereyi kapat. Artık **`MapCut Studio.bat`** dosyasına
-   çift tıklayarak uygulamayı açabilirsin. Arkada açılan siyah pencereyi
-   kapatma; uygulama çalıştığı sürece açık kalmalı.
+> SmartScreen "bilgisayarınızı korudu" derse: **Ek bilgi → Yine de çalıştır**.
 
-Windows'ta encoder otomatik seçilir. NVIDIA, Intel ya da AMD ekran kartı
-varsa onun donanım kodlayıcısı kullanılır (NVENC / QuickSync / AMF), hiçbiri
-yoksa işlemciyle (libx264) encode edilir. İşlemciyle encode daha yavaştır ama
-sonuç aynıdır.
+Video kodlaması ekran kartına göre otomatik seçilir: Mac'te VideoToolbox; Windows'ta NVIDIA (NVENC),
+Intel (QuickSync) veya AMD (AMF), hiçbiri yoksa işlemci (libx264).
 
-> Windows'ta SmartScreen "Windows bilgisayarınızı korudu" derse:
-> **Ek bilgi → Yine de çalıştır**.
+### Opsiyonel: Claude Code (hikâye otomasyonu için)
 
-### Gelişmiş: araçları elle seçmek
+`/hikaye` otomasyonu için [Claude Code](https://claude.com/claude-code) ve tarayıcıda
+**Claude in Chrome** eklentisi gerekir. Normal bir Claude aboneliği yeterlidir. Kullanmak istemeyen
+hikâye aşamasını eskisi gibi elle yapar; uygulamanın geri kalanı aynen çalışır.
 
-Uygulama ffmpeg'i ve whisper'ı kendisi bulur. Farklı bir kurulum kullanmak
-istersen şu ortam değişkenleriyle elle belirtebilirsin: `MAPCUT_FFMPEG`,
-`MAPCUT_FFPROBE`, `MAPCUT_WHISPER`, `MAPCUT_ENCODER` (örn. `libx264`).
+---
 
-## Video Asistanı (hikâye → harita → Flow)
+## İlk ayarlar
 
-Ana penceredeki **Video Asistanı…** düğmesi, render'dan önceki adımları tek pencerede toplar:
+Uygulamada **Video Asistanı… → Hikâye & Harita → Ayarlar…**:
 
-- **Hikâye & Harita sekmesi:**
-  - **Claude Code ile hikâye üret (/hikaye)** — opsiyonel. [Claude Code](https://claude.com/claude-code) ve
-    Claude in Chrome ile; normal Claude aboneliği yeterli, API ücreti yok. Claude Code, ayarlardaki claude.ai
-    sohbetinden 3 başlık fikri ister, seçtiğin fikrin paketini ve scriptini alır, HeyGen'de avatar videosunu
-    üretip indirir, avatar süresiyle haritayı aldırır ve kontrol eder. Talimatlar:
-    `.claude/skills/hikaye/SKILL.md`.
-  - **Ayarlar…** — kullanıcıya özel: ana klasör, claude.ai sohbet linki, fikir/harita mesajları, HeyGen
-    avatarı, ses ve motor (`ayarlar.json`; örnek: `ayarlar.ornek.json`).
-  - **Haritayı kontrol et** — süre avatarla tutuyor mu, eksik görsel/video promptu var mı, tablo düzgün mü.
-- **Flow sekmesi:** Google Flow için görsel ve video mesajlarını, otomatik devam kodunu
-  (`flow/flow_oto_devam.js`) ve indirilen zip'lerin içe aktarılmasını yönetir.
-- **Render projesine aktar:** harita + avatar + görseller + videolar tek tuşla ana pencereye yüklenir.
+| Ayar | Örnek | Açıklama |
+|---|---|---|
+| Ana klasör | `~/Desktop/Videolar` | Her video için `vid1`, `vid2`… klasörleri burada açılır |
+| claude.ai sohbet linki | `https://claude.ai/chat/…` | Hikâyelerin yazıldığı sohbet; her video aynı sohbette devam eder |
+| Fikir mesajı | `3 başlık fikir ver` | Sohbete gönderilen ilk mesaj |
+| Harita mesajı | `avatar seslendirmem {DK} dakika {SN} saniye …` | `{DK}` `{SN}` `{TOPLAM_SN}` avatar süresiyle doldurulur |
+| HeyGen avatar / ses | kendi avatarının adı | HeyGen → My Avatars'taki ad |
+| Motion Engine | `Avatar III` | Avatar III kredi harcamaz |
 
-## Kullanım
+Ayarlar `ayarlar.json` dosyasında tutulur (kişiseldir, git'e girmez; örnek: `ayarlar.ornek.json`).
 
-1. **Proje Klasörü Seç / Oluştur.** Her video için ayrı bir klasör. Gerekli
-   alt klasörler (`avatar/`, `videolar/`, `gorseller/`, `assets/`, `output/`)
-   otomatik oluşturulur.
-2. **TIMELINE_MAP.md Seç.** Dosya okunur ve üstte özet gösterilir: toplam
-   süre, kaç görsel, kaç video ve kaç avatar bloğu beklendiği.
-3. **avatar.mp4 Seç.**
-4. **Video Klasörü Seç.** İndirdiğin B-roll'lar `V1.mp4, V2.mp4…` olarak
-   kopyalanır.
-5. **Görsel Klasörü Seç.** Görseller `gorsel_001, gorsel_002…` olarak
-   kopyalanır.
-6. **Ayarlar.** Crossfade süresi, görünüm stili, efekt yoğunluğu, sıcak ton,
-   Ken Burns, vinyet, letterbox, geçiş çeşitliliği ve ses normalizasyonu.
-7. **Altyazı.** Kelime kelime sarı vurgulu (CapCut/TikTok tarzı) otomatik
-   altyazı; model boyutu ve dil seçilebilir.
-8. **Test Render** (ilk N saniye) ya da **Tam Render.** İlerleme alttaki
-   panelde görünür. Bitince süre raporu çıkar ve çıktı `output/` klasörüne
-   yazılır.
+---
 
-### ⚠️ Dosya adlandırma (önemli)
+## Adım adım kullanım
 
-Görseller ve videolar **dosya adındaki ilk sayıya göre** sıralanır. Bu
-sıralama sayısaldır, alfabetik değildir: `#2`, `#10`'dan önce, `#10` da
-`#100`'den önce gelir. Bu yüzden:
+Ana pencerede **Video Asistanı…** düğmesine bas.
 
-- ✅ `Görsel_#1_20260924.jpeg`, `Görsel_#2_...`, … `Görsel_#174_...`
-- ✅ `Vid1_—_Yağmurlu_sokak.mp4`, … `Vid10_—_...mp4`
-- ❌ Numarasız adlar (`image (3).png`, `download.jpg` …)
+### 1. Hikâye ve harita
+- **Otomatik (Claude Code ile):** **Claude Code ile hikâye üret** → Claude Code'da `/hikaye`
+  (VS Code eklentisinde mesajda `@browser` olmalı). Claude Code fikirleri sana gösterip seçimini sorar;
+  gerisini (paket, script, HeyGen, harita, kontrol) kendisi yapar. Talimatlar: `.claude/skills/hikaye/SKILL.md`.
+- **Elle:** Hikâyeni her zamanki gibi yazdır; HeyGen videosunu **Avatar videosunu seç** ile al (süresi
+  otomatik ölçülür); haritayı `vidN` klasörüne koyup **Haritayı kontrol et**'e bas.
 
-Bir numara eksikse (örn. #57 indirilmemiş) sonraki bütün görseller bir kayar.
-Uygulama toplam sayı haritayla tutmazsa uyarır; bu uyarıyı görürsen devam
-etme, eksik dosyayı bul.
+Harita kontrolü şunlara bakar: toplam süre avatarla saniyesi saniyesine tutuyor mu, her görselin ve
+her videonun promptu var mı, zaman tablosunda boşluk/çakışma var mı.
 
-### Görünüm stilleri
+### 2. Görseller (Google Flow)
+1. **Flow** sekmesi → **Klasör Seç** (`vidN`).
+2. **① Görsel mesajını kopyala** → Flow'da **Yeni proje** (Ajan modu) → yapıştır → gönder.
+3. **② Oto-devam kodunu kopyala** → Flow sekmesinde konsolu aç (Mac: `Cmd+Option+J`,
+   Windows: `Ctrl+Shift+J`) → yapıştır → Enter. *(İlk seferde Chrome uyarırsa konsola `allow pasting` yaz.)*
+   Sol altta **Flow Oto-Devam** paneli çıkar; partları kendisi onaylar, başarısız ya da yanlış
+   adlandırılmış görselleri düzelttirir.
+4. Panel **Bitti** deyince: Flow ızgara ayarından boyutu **K** yap → hepsini sürükleyerek seç → sağ tık →
+   **İndir** → **③ İndirilenleri al → görseller**. Eksik/çift numara varsa listelenir.
 
-- **Modern:** Sallanma yok, sadece hafif film grain.
-- **Vintage 1:** Zar zor hissedilen bir kamera "nefesi" ve biraz daha
-  belirgin grain.
-- **Vintage 2:** Vintage 1'in daha belirgin hali.
+### 3. Videolar
+Aynı adımlar, **Videolar** bölümüyle. Kredi onaylarını kod otomatik verebilir (en fazla 10).
+Videoların sesi içe aktarılırken silinir.
 
-Her stil Hafif / Orta / Güçlü yoğunlukla ölçeklenir.
+### 4. Render
+1. Ana pencerede **Proje Klasörü Seç / Oluştur** (render çıktısının yazılacağı klasör).
+2. Video Asistanı → **Görselleri + videoları render projesine aktar** (harita + avatar da gelir).
+3. Ayarları seç → **Test Render** ile ilk dakikalara bak → **Tam Render**. Çıktı `output/` klasöründe.
 
-## Komut satırından kullanım
+---
 
-Arayüz olmadan da çalıştırılabilir. Otomasyon ya da toplu render için
-(Windows'ta `python3.10` yerine `py` yaz):
+## Zaman haritası formatı
 
-```bash
-python3.10 scripts/parse_timeline.py --project-dir ~/Videolar/proje1
-python3.10 scripts/render.py --project-dir ~/Videolar/proje1 --test
-python3.10 scripts/render.py --project-dir ~/Videolar/proje1 \
-    --style vintage1 --effect-intensity medium \
-    --captions --caption-model small.en --caption-lang en
+`TIMELINE_MAP.md` dört bölümden oluşur:
+
+1. `## 1. AVATAR TALKING HEAD CUE SHEET` — avatar blokları (A1 her zaman 0:00–0:20)
+2. `## 2. …` — video promptları, her biri `**V1 — Başlık**` ile başlar
+3. `## 3. GÖRSEL PROMPT HARİTASI` — partlar `### Görsel #a–#b (…)`, her görsel `- #N: …`
+4. `## 4. TIMELINE ENTEGRASYON PLANI` — kurgu tablosu:
+
+```markdown
+| Sıra | Zaman | Süre | İçerik |
+|---|---|---|---|
+| 1 | 0:00 – 0:20 | 20s | **A1 (Avatar)** — Açılış |
+| 2 | 0:20 – 0:35 | 15s | Görsel #1 → #3 (Giriş) |
+| 3 | 0:35 – 0:40 | 5s  | **V1** (Yağmurlu sokak) |
 ```
 
-Tüm seçenekler için: `python3.10 scripts/render.py --help`
+- `**A1 (Avatar)**` → avatar videosunun **aynı zaman aralığı** ekrana gelir; ses baştan sona avatardandır.
+- `**V1**` → `videolar/` içindeki 1 numaralı video.
+- `Görsel #4 → #30` → bu görseller satırın süresine eşit bölünür.
+
+## Dosya adlandırma kuralları
+
+Görseller ve videolar **dosya adındaki ilk sayıya** göre sıralanır (sayısal: `#2` < `#10` < `#100`).
+
+- ✅ `Görsel_#12_20261003.jpeg`, `Vid3_—_Başlık.mp4`
+- ❌ Numarasız adlar (`image (3).png`, `download.jpg`)
+
+Flow'dan otomatik devam koduyla üretilen dosyalar bu kurala zaten uyar. Klasör seçildiğinde uygulama
+eksik, çift ve numarasız dosyaları listeler.
+
+## Render ayarları
+
+- **Görünüm:** Modern (sade grain) · Vintage 1 · Vintage 2 — her biri Hafif/Orta/Güçlü.
+- **Geçiş çeşitliliği:** geçişlerin çoğu fade, ~%20'si hafif kaydırma.
+- **Ken Burns:** görsellerde yavaş kayma hareketi.
+- **Letterbox, vinyet, sıcak ton, ses normalizasyonu (loudnorm).**
+- **Otomatik altyazı:** whisper.cpp ile kelime kelime vurgulu (CapCut/TikTok tarzı); model ilk
+  kullanımda indirilir (75 MB – 1.5 GB).
+
+## Komut satırı
+
+```bash
+python3 scripts/render.py --project-dir <proje> --test          # Windows: python3 yerine py
+python3 scripts/render.py --project-dir <proje> --style vintage1 --captions
+python3 scripts/check_assets.py <vidN>/görseller --map <vidN>/TIMELINE_MAP.md
+python3 scripts/story_tools.py kontrol <vidN>/TIMELINE_MAP.md <vidN>
+python3 scripts/flow_tools.py al gorsel <vidN> [zip …]
+```
+
+İleri seviye: ffmpeg/whisper/encoder `MAPCUT_FFMPEG`, `MAPCUT_FFPROBE`, `MAPCUT_WHISPER`,
+`MAPCUT_ENCODER` ortam değişkenleriyle elle seçilebilir.
 
 ## Proje yapısı
 
 ```
-VideoEditStudio.command   # macOS: çift tıkla → arayüzü açar
-MapCut Studio.bat         # Windows: çift tıkla → arayüzü açar
-kurulum_windows.bat       # Windows: tek seferlik kurulum
+VideoEditStudio.command      # macOS başlatıcı
+MapCut Studio.bat            # Windows başlatıcı
+kurulum_windows.bat          # Windows tek seferlik kurulum
+ayarlar.ornek.json           # örnek kullanıcı ayarları (kendi ayarların: ayarlar.json)
 scripts/
-  gui.py                  # Tkinter masaüstü arayüzü
-  parse_timeline.py       # TIMELINE_MAP.md → edl.json
-  render.py               # 3 aşamalı ffmpeg render motoru
-  captions.py             # whisper.cpp → karaoke tarzı .ass altyazı
-  platform_tools.py       # ffmpeg / whisper / encoder'ı işletim sistemine göre bulur
+  gui.py                     # ana pencere (render)
+  flow_gui.py                # Video Asistanı (hikâye/harita, Flow, ayarlar)
+  render.py                  # 3 aşamalı ffmpeg render motoru
+  parse_timeline.py          # TIMELINE_MAP.md → kurgu listesi
+  story_tools.py             # vidN klasörü, avatar süresi, harita kontrolü
+  flow_tools.py              # Flow mesajları, zip içe aktarma
+  check_assets.py            # eksik/çift/numarasız dosya kontrolü
+  captions.py                # whisper.cpp → karaoke altyazı
+  platform_tools.py          # macOS/Windows farkları (ffmpeg, encoder, whisper)
+  settings.py                # ayarlar.json
+flow/flow_oto_devam.js       # Flow otomatik devam betiği (tarayıcı konsolu)
+.claude/skills/hikaye/       # /hikaye Claude Code yeteneği + ekran notları
 ```
 
-Bir video projesi klasörü (bu repoya dahil **değil**) şöyle görünür:
+---
 
-```
-proje1/
-  TIMELINE_MAP.md
-  avatar/avatar.mp4
-  videolar/V1.mp4 … V10.mp4
-  gorseller/gorsel_001.jpeg … gorsel_174.jpeg
-  output/final_render.mp4
-```
+## ⚖️ Lisans ve kullanım koşulları
+
+Copyright (c) 2026 [yusufsametkarlidag](https://github.com/yusufsametkarlidag).
+
+Bu proje **[PolyForm Noncommercial 1.0.0](LICENSE.md)** ile lisanslanmıştır:
+
+- ✅ Kişisel kullanım, öğrenme, deneme, kendi videoların için kullanma — **serbest ve ücretsiz**.
+- ✅ Ticari olmayan amaçla değiştirme ve paylaşma — lisans dosyası ve telif notu korunarak.
+- ❌ **Ticari kullanım**: uygulamayı veya türevlerini satmak, ücretli hizmet/abonelik olarak sunmak,
+  bir ürüne gömüp ticari olarak dağıtmak — **yasaktır** (ayrı yazılı izin gerekir).
+- ❌ Telif notunu kaldırarak kendi eseriymiş gibi yayınlamak.
+
+**Üçüncü taraf servisler:** Claude, HeyGen ve Google Flow'u kullanırken her birinin kendi kullanım
+koşulları ve içerik politikaları geçerlidir. MapCut Studio bu servislerin kurallarını aşmak için
+tasarlanmamıştır (ör. Flow'un tanınmış kişi politikasına takılan üretimler zorlanmaz, yüzsüz olarak
+yeniden yorumlatılır). Üretilen içeriğin sorumluluğu kullanıcıya aittir.

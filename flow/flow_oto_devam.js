@@ -1,3 +1,4 @@
+// MapCut Studio — Copyright (c) 2026 yusufsametkarlidag. PolyForm Noncommercial 1.0.0 lisanslıdır: ticari kullanım yasaktır. Ayrıntı: LICENSE.md
 // Flow Oto-Devam: Google Flow ajan modunda her part bitince otomatik onay verir.
 // Sayfanin sag altinda kucuk bir durum paneli acar (Durdur dugmesiyle).
 // Tarayicinin icinde calisir; Claude/API kullanmaz.

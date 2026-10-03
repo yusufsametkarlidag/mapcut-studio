@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# MapCut Studio — Copyright (c) 2026 yusufsametkarlidag. PolyForm Noncommercial 1.0.0 lisanslıdır: ticari kullanım yasaktır. Ayrıntı: LICENSE.md
 """
 Indirilen gorsel/video klasorunun numaralandirmasini kontrol eder:
   - numarasiz (isimlendirilmemis) dosya var mi

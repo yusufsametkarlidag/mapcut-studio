@@ -1,5 +1,6 @@
 @echo off
 chcp 65001 >nul
+rem MapCut Studio - Copyright (c) 2026 yusufsametkarlidag. PolyForm Noncommercial 1.0.0 lisanslidir: ticari kullanim yasaktir. Ayrinti: LICENSE.md
 rem MapCut Studio - Windows kurulumu (bir kere calistirmak yeterli).
 rem Python, ffmpeg (tam surum) ve altyazi icin whisper.cpp kurar.
 cd /d "%~dp0"

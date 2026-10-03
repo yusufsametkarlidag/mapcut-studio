@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# MapCut Studio — Copyright (c) 2026 yusufsametkarlidag. PolyForm Noncommercial 1.0.0 lisanslıdır: ticari kullanım yasaktır. Ayrıntı: LICENSE.md
 """
 Kullanıcıya özel ayarlar (ayarlar.json, uygulama klasöründe; git'e girmez).
 Dosya yoksa ayarlar.ornek.json'daki varsayılanlar kullanılır.
