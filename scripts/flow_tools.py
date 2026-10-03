@@ -48,15 +48,13 @@ IMAGE_INTRO = (
 )
 
 VIDEO_INTRO = (
-    "Aşağıda video promptları var. Bunları şu sırayla oluşturmanı istiyorum:\n"
-    "1) Önce \"image-to-video\" olarak işaretli videolar (V1, V2, V3…) için verilen \"kaynak görsel promptu\" ile "
-    "birer görsel oluştur; adları \"V1 kaynak\", \"V2 kaynak\"… olsun. Sonra onayımı bekle.\n"
-    "2) Onay verince bu görselleri, her birinin altında verilen hareket talimatıyla image-to-video olarak videolaştır.\n"
-    "3) Sonra kalan V promptlarını doğrudan video olarak oluştur.\n"
+    "Aşağıda video promptları var (V1, V2, V3…). Hepsini sırayla doğrudan video olarak oluştur; "
+    "önce görsel üretip sonra videolaştırma yapma. Bir promptta hem \"kaynak görsel\" hem \"hareket talimatı\" "
+    "varsa ikisini birleştirip tek bir video promptu olarak kullan.\n"
     "Kurallar: Hiçbir videoda ses olmayacak (müzik, ses efekti, konuşma yok; tamamen sessiz). "
     "Her video 5 saniye ve 16:9 olacak. Videoların adı numarasıyla başlayacak: "
     "\"Vid1 — <başlık>\", \"Vid2 — <başlık>\"… (başlık, promptun başındaki V başlığı). "
-    "Görüntüler tamamen doğal olacak, asla yapaylık olmayacak. Her aşamayı bitirince onayımı bekle."
+    "Görüntüler tamamen doğal olacak, asla yapaylık olmayacak. Hepsini bitirince onayımı bekle."
 )
 
 OTO_CFG = {
