@@ -19,6 +19,12 @@
       "omuz üstünden görünsün ya da yalnızca eller ve nesneler yakın planda olsun; tanınabilir yüz, saç stili veya imza " +
       "kostüm olmasın. Sahnenin anlamı aynı kalsın. Sonra onayımı bekle.",
     partBasinaMaxPolitika: 1, // bir adimda en fazla 1 kez yuzsuz yeniden yorumlama iste
+    // Onay vermeden once ekrandaki gorsel kartlarinin adi bu kalipla baslamali (null: kontrol yok).
+    // Flow ajani ilk partta adlandirma talimatini sik sik atliyor.
+    adKontrol: null,
+    adMesaji: "Bazı görsellerin adı \"Görsel #numara\" ile başlamıyor: {liste}. Bunları prompt sırasına göre " +
+      "doğru numarayla \"Görsel #numara\" olarak yeniden adlandır; yeni görsel üretme. Sonra onayımı bekle.",
+    partBasinaMaxAdTekrar: 2,
     // Flow video uretiminden once "X kredi karsiliginda ... Onayla / Reddet" diye sorar.
     // false: durup kullanicinin "Onayla"ya basmasini bekler (kullanici basinca devam eder).
     // true : "Onayla"ya kendisi basar (kredi harcar).
@@ -63,14 +69,24 @@
   // sohbetteki "Görsel #8–#21" gibi metinler sayilmaz. Flow ekran disindaki kartlari
   // sayfadan kaldirdigi (sanal kaydirma) icin gorulen numaralar zamanla biriktirilir;
   // bu sayi yaklasiktir, kesin kontrol indirmeden sonra check_assets.py ile yapilir.
+  // Kart adi: flow-image-tile / flow-video-tile icindeki son metin satiri (simge adlari haric)
+  const tileLabel = t => (t.innerText || "").split("\n").map(x => x.trim())
+    .filter(x => x && !/^(image|play_circle|warning|refresh|undo|delete_forever|%\s?\d+)$/.test(x)).pop() || "";
   const seen = new Set();
   const imageNumbers = () => {
-    for (const e of $$("main *")) {
-      if (e.children.length) continue;
-      const m = (e.textContent || "").trim().match(/^Görsel #(\d+)$/);
+    for (const t of $$("main flow-image-tile")) {
+      const m = tileLabel(t).match(/^Görsel #(\d+)(?!\d)/);
       if (m) seen.add(+m[1]);
     }
     return seen;
+  };
+  // Uretimi bitmis (yuzde gostermeyen, basarisiz olmayan) ama adi kaliba uymayan gorsel kartlari
+  const unnamedImages = () => {
+    if (!CFG.adKontrol) return [];
+    const re = new RegExp(CFG.adKontrol);
+    return $$("main flow-image-tile")
+      .filter(t => !/%\s?\d|Başarısız/.test(t.innerText || ""))
+      .map(tileLabel).filter(l => l && !re.test(l));
   };
 
   function isBusy() {
@@ -101,7 +117,7 @@
   }
 
   // ---- ana dongu ----
-  let errorRetries = 0, creditApprovals = 0, policyRetries = 0, policyBaseline = policyCount();
+  let errorRetries = 0, creditApprovals = 0, policyRetries = 0, policyBaseline = policyCount(), renameRetries = 0;
   let running = true, calm = 0, sent = 0, retriesThisPart = 0, failedBaseline = failedCount(), parts = 0;
   const api = window.__flowOto = {
     panel,
@@ -159,9 +175,14 @@
       } else if (failedNow > failedBaseline && retriesThisPart < CFG.partBasinaMaxTekrar) {
         setMsg("Başarısız görsel var, yeniden ürettiriliyor…", "#fb8c00");
         if (await send(CFG.tekrarMesaji)) { sent++; retriesThisPart++; failedBaseline = failedNow; }
+      } else if (unnamedImages().length && renameRetries < CFG.partBasinaMaxAdTekrar) {
+        const bad = unnamedImages();
+        setMsg(`${bad.length} görselin adı yanlış, yeniden adlandırtılıyor…`, "#fb8c00");
+        const liste = bad.slice(0, 12).map(x => `"${x}"`).join(", ") + (bad.length > 12 ? " …" : "");
+        if (await send(CFG.adMesaji.replace("{liste}", liste))) { sent++; renameRetries++; }
       } else if (/onay|bekliyorum|devam edeyim|devam etmemi|geçeyim|geçmemi|ister misiniz/i.test(lastText)) {
         setMsg("Part bitti, onay veriliyor…");
-        if (await send(CFG.devamMesaji)) { sent++; parts++; retriesThisPart = 0; errorRetries = 0; policyRetries = 0;
+        if (await send(CFG.devamMesaji)) { sent++; parts++; retriesThisPart = 0; errorRetries = 0; policyRetries = 0; renameRetries = 0;
                                             failedBaseline = failedCount(); policyBaseline = policyCount(); }
       } else {
         api.stop(`Bitti: ajan artık onay istemiyor. En büyük görsel #${max}. ` +

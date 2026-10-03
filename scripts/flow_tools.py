@@ -59,6 +59,7 @@ VIDEO_INTRO = (
 
 OTO_CFG = {
     "gorsel": {
+        "adKontrol": "^Görsel #\\d+",
         "devamMesaji": "Onaylıyorum, sıradaki partı oluştur. Her görselin adı Görsel #numara olsun. "
                        "Partı bitirince yine onayımı bekle.",
         "tekrarMesaji": "Bu partta başarısız olan görsel(ler) var. Başarısız olanları aynı numara ve aynı adla "
