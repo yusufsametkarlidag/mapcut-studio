@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Hikâye & harita aşaması (claude.ai ile, API'siz):
-  - PRİNCE altında sıradaki vidN klasörünü oluşturur
-  - şablonlardan (sablonlar/*.md) Claude'a verilecek mesajları hazırlar
-  - HeyGen'den indirilen avatar videosunu vidN/avatar.mp4 olarak alır ve süresini ölçer
-  - Claude'un yazdığı haritayı kaydeder ve render/Flow'a geçmeden kontrol eder
+Hikâye & harita aşaması yardımcıları (/hikaye Claude Code yeteneği ve uygulama kullanır).
 
-Şablon yer tutucuları: {KONU} {SCRIPT} {SURE_MMSS} {SURE_SN} {ORNEK_HARITA}
+Komut satırı:
+  python3 story_tools.py yeni-klasor                 → ana klasörde sıradaki vidN'i oluşturur, yolunu yazar
+  python3 story_tools.py kaydet <vidDir> <dosyaAdı>  → stdin'deki metni vidDir/dosyaAdı olarak kaydeder
+  python3 story_tools.py avatar <vidDir> <video>     → videoyu vidDir/avatar.mp4 yapar, süresini yazar
+  python3 story_tools.py harita-mesaji <vidDir>      → ayarlardaki harita mesajını avatar süresiyle doldurur
+  python3 story_tools.py kontrol <harita.md> [<vidDir>] → haritayı kontrol eder (avatar süresiyle kıyaslar)
 """
 import re
 import shutil
@@ -19,28 +20,24 @@ SCRIPTS_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPTS_DIR))
 import flow_tools  # noqa: E402
 import parse_timeline  # noqa: E402
+import settings  # noqa: E402
 from platform_tools import NO_WINDOW, TEXT_KW, ffprobe_bin  # noqa: E402
-
-APP_DIR = SCRIPTS_DIR.parent
-TEMPLATES_DIR = APP_DIR / "sablonlar"
-PACKAGE_TEMPLATE = TEMPLATES_DIR / "paket_mesaji.md"
-MAP_TEMPLATE = TEMPLATES_DIR / "harita_mesaji.md"
-PRINCE_DIR = Path.home() / "Desktop" / "PRİNCE"
 
 PACKAGE_FILE = "PAKET.md"
 SCRIPT_FILE = "SCRIPT.txt"
-MAP_FILE = "TIMELINE_MAP.md"
 AVATAR_FILE = "avatar.mp4"
 
 
 # ------------------------------------------------------------ klasör
 def _vid_number(p: Path):
-    m = re.fullmatch(r"vid(\d+)", unicodedata.normalize("NFC", p.name).casefold().replace("i̇", "i"))
+    name = unicodedata.normalize("NFC", p.name).casefold().replace("i̇", "i")
+    m = re.fullmatch(r"vid(\d+)", name)
     return int(m.group(1)) if m else None
 
 
-def next_vid_dir(base: Path = PRINCE_DIR) -> Path:
-    """PRİNCE altındaki en büyük vidN'den sonrakini oluşturur (görseller/ ve videolar/ ile)."""
+def next_vid_dir(base: Path = None) -> Path:
+    """Ana klasördeki en büyük vidN'den sonrakini oluşturur (görseller/ ve videolar/ ile)."""
+    base = base or settings.base_dir()
     base.mkdir(parents=True, exist_ok=True)
     nums = [n for p in base.iterdir() if p.is_dir() and (n := _vid_number(p)) is not None]
     d = base / f"vid{max(nums, default=0) + 1}"
@@ -74,31 +71,12 @@ def avatar_seconds(vid_dir: Path):
     return round(media_duration(p)) if p.exists() else None
 
 
-# ------------------------------------------------------------ mesajlar
-def _example_map(vid_dir: Path):
-    """Format örneği olarak, bu klasör dışındaki en yeni haritayı kullanır."""
-    maps = [m for m in PRINCE_DIR.glob("*/TIMELINE_MAP*.md") if m.parent.resolve() != vid_dir.resolve()]
-    return max(maps, key=lambda m: m.stat().st_mtime) if maps else None
-
-
-def package_message(topic: str) -> str:
-    return PACKAGE_TEMPLATE.read_text(encoding="utf-8").replace("{KONU}", topic.strip())
-
-
-def map_message(vid_dir: Path) -> str:
-    script_path = vid_dir / SCRIPT_FILE
-    if not script_path.exists():
-        raise FileNotFoundError("Önce scripti kaydet (③).")
+def map_request(vid_dir: Path) -> str:
     secs = avatar_seconds(vid_dir)
     if secs is None:
-        raise FileNotFoundError("Önce HeyGen avatar videosunu seç (④).")
-    ex = _example_map(vid_dir)
-    example = ex.read_text(encoding="utf-8") if ex else "(örnek harita bulunamadı)"
-    return (MAP_TEMPLATE.read_text(encoding="utf-8")
-            .replace("{SCRIPT}", script_path.read_text(encoding="utf-8").strip())
-            .replace("{SURE_MMSS}", fmt_mmss(secs))
-            .replace("{SURE_SN}", str(secs))
-            .replace("{ORNEK_HARITA}", example))
+        raise FileNotFoundError(f"{vid_dir / AVATAR_FILE} yok; önce avatar videosunu al.")
+    return (settings.load()["harita_mesaji"]
+            .replace("{DK}", str(secs // 60)).replace("{SN}", str(secs % 60)).replace("{TOPLAM_SN}", str(secs)))
 
 
 def save_text(vid_dir: Path, name: str, text: str) -> Path:
@@ -122,13 +100,11 @@ def validate_map(map_path: Path, expected_seconds=None):
         problems.append(f"Haritanın toplam süresi {fmt_mmss(total)} ({total} sn), avatar ise "
                         f"{fmt_mmss(expected_seconds)} ({expected_seconds} sn). Fark: {total - expected_seconds:+d} sn.")
 
-    # Tablodaki görsel numaraları 1..N kesintisiz olmalı
     nums = [img["index"] for e in edl["entries"] if e["type"] == "image_block" for img in e["images"]]
     if nums != list(range(1, len(nums) + 1)):
         problems.append("Tablodaki görsel numaraları 1'den başlayıp kesintisiz artmıyor.")
 
     md = map_path.read_text(encoding="utf-8")
-    # Bölüm 3: her görselin promptu olmalı
     try:
         sec3 = flow_tools._section(md, 3)
         prompt_nums = {int(n) for n in re.findall(r"^\s*-\s*#(\d+)\s*:", sec3, flags=re.M)}
@@ -138,7 +114,6 @@ def validate_map(map_path: Path, expected_seconds=None):
                             + (" …" if len(missing) > 15 else ""))
     except ValueError as e:
         problems.append(str(e))
-    # Bölüm 2: tablodaki her V için prompt olmalı
     try:
         sec2 = flow_tools._section(md, 2)
         v_defined = {f"V{n}" for n in re.findall(r"^\*\*V(\d+)\b", sec2, flags=re.M)}
@@ -153,13 +128,35 @@ def validate_map(map_path: Path, expected_seconds=None):
     return summary, problems
 
 
+def main():
+    a = sys.argv[1:]
+    if not a:
+        print(__doc__)
+        sys.exit(2)
+    cmd = a[0]
+    if cmd == "yeni-klasor":
+        print(next_vid_dir())
+    elif cmd == "kaydet" and len(a) == 3:
+        p = save_text(Path(a[1]), a[2], sys.stdin.read())
+        print(f"{p} ({p.stat().st_size} bayt)")
+    elif cmd == "avatar" and len(a) == 3:
+        secs = import_avatar(Path(a[1]), Path(a[2]))
+        print(f"avatar.mp4 süresi: {fmt_mmss(secs)} ({secs} sn)  DK={secs // 60} SN={secs % 60}")
+    elif cmd == "harita-mesaji" and len(a) == 2:
+        print(map_request(Path(a[1])))
+    elif cmd == "kontrol" and len(a) in (2, 3):
+        exp = avatar_seconds(Path(a[2])) if len(a) == 3 else None
+        summ, probs = validate_map(Path(a[1]), exp)
+        print(summ or "")
+        for p in probs:
+            print("❌", p)
+        if not probs:
+            print("✅ Harita hazır.")
+        sys.exit(1 if probs else 0)
+    else:
+        print(__doc__)
+        sys.exit(2)
+
+
 if __name__ == "__main__":
-    # Hızlı kontrol: python3 story_tools.py <harita.md> [beklenen_saniye]
-    path = Path(sys.argv[1])
-    exp = int(sys.argv[2]) if len(sys.argv) > 2 else None
-    summ, probs = validate_map(path, exp)
-    print(summ)
-    for p in probs:
-        print("❌", p)
-    if not probs:
-        print("✅ Harita hazır.")
+    main()

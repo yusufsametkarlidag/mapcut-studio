@@ -3,7 +3,7 @@
 "Flow Asistanı" penceresi: Google Flow'da görsel/video üretim akışını
 uygulamanın içinden yürütmek için.
 
-  1) Kaynak klasörü seç (ör. PRİNCE/vid12 — içinde TIMELINE_MAP*.md olan klasör)
+  1) Kaynak klasörü seç (ör. Videolar/vid12 — içinde TIMELINE_MAP*.md olan klasör)
   2) Görseller:  mesajı kopyala → oto-devam kodunu kopyala → indirilenleri al
   3) Videolar:   mesajı kopyala → oto-devam kodunu kopyala → indirilenleri al
   4) Render projesine aktar (ana penceredeki görsel/video seçimini otomatik yapar)
@@ -16,12 +16,78 @@ from tkinter import filedialog, messagebox, ttk
 import check_assets
 import flow_tools
 import parse_timeline
+import settings
 import story_tools
 from platform_tools import IS_MAC, IS_WINDOWS
 
 MOD = "Cmd" if IS_MAC else "Ctrl"
 CONSOLE_KEY = "Cmd+Option+J" if IS_MAC else "Ctrl+Shift+J"
-PRINCE_DIR = Path.home() / "Desktop" / "PRİNCE"
+
+
+def shlex_quote(s):
+    import shlex
+    return shlex.quote(s)
+
+
+class SettingsDialog(tk.Toplevel):
+    """ayarlar.json düzenleyici (kullanıcıya özel: klasör, claude.ai sohbeti, mesajlar, HeyGen)."""
+    FIELDS = [
+        ("ana_klasor", "Ana klasör (vid1, vid2 …)"),
+        ("claude_sohbet_url", "claude.ai sohbet linki"),
+        ("fikir_mesaji", "Fikir mesajı"),
+        ("harita_mesaji", "Harita mesajı ({DK} {SN} {TOPLAM_SN})"),
+        ("heygen.avatar", "HeyGen avatar adı"),
+        ("heygen.ses", "HeyGen ses adı"),
+    ]
+
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("Ayarlar")
+        self.data = settings.load()
+        self.vars = {}
+        for r, (key, label) in enumerate(self.FIELDS):
+            ttk.Label(self, text=label).grid(row=r, column=0, sticky="w", padx=8, pady=3)
+            v = tk.StringVar(value=self._get(key))
+            ttk.Entry(self, textvariable=v, width=70).grid(row=r, column=1, sticky="we", padx=8, pady=3)
+            self.vars[key] = v
+        ttk.Button(self, text="Seç…", command=self._pick_dir).grid(row=0, column=2, padx=4)
+        r = len(self.FIELDS)
+        ttk.Label(self, text="Motion Engine").grid(row=r, column=0, sticky="w", padx=8, pady=3)
+        self.engine = tk.StringVar(value=self.data["heygen"]["motion_engine"])
+        ttk.Combobox(self, textvariable=self.engine, values=["Avatar III", "Avatar IV", "Avatar V"],
+                     width=14, state="readonly").grid(row=r, column=1, sticky="w", padx=8)
+        self.auto = tk.BooleanVar(value=bool(self.data["heygen"]["otomatik_submit"]))
+        ttk.Checkbutton(self, text="HeyGen'de Submit'e otomasyon bassın (Avatar III kredi harcamıyor)",
+                        variable=self.auto).grid(row=r + 1, column=1, sticky="w", padx=8, pady=3)
+        ttk.Button(self, text="Kaydet", command=self._save).grid(row=r + 2, column=1, sticky="e", padx=8, pady=8)
+        self.columnconfigure(1, weight=1)
+
+    def _get(self, key):
+        d = self.data
+        for k in key.split("."):
+            d = d[k]
+        return d
+
+    def _set(self, key, value):
+        d = self.data
+        *path, last = key.split(".")
+        for k in path:
+            d = d[k]
+        d[last] = value
+
+    def _pick_dir(self):
+        d = filedialog.askdirectory(title="Ana klasörü seç", parent=self)
+        if d:
+            self.vars["ana_klasor"].set(d)
+
+    def _save(self):
+        for key, v in self.vars.items():
+            self._set(key, v.get().strip())
+        self.data["heygen"]["motion_engine"] = self.engine.get()
+        self.data["heygen"]["otomatik_submit"] = self.auto.get()
+        settings.save(self.data)
+        messagebox.showinfo("Ayarlar", f"Kaydedildi: {settings.SETTINGS_FILE}", parent=self)
+        self.destroy()
 
 
 class FlowAssistant(tk.Toplevel):
@@ -39,7 +105,7 @@ class FlowAssistant(tk.Toplevel):
     def _build(self):
         pad = dict(padx=8, pady=4)
 
-        top = ttk.LabelFrame(self, text="Kaynak klasör (ör. PRİNCE/vid12)")
+        top = ttk.LabelFrame(self, text="Kaynak klasör (ör. Videolar/vid12)")
         top.pack(fill="x", **pad)
         self.dir_label = ttk.Label(top, text="(seçilmedi)", foreground="#888")
         self.dir_label.grid(row=0, column=0, sticky="w", padx=8, pady=6)
@@ -80,7 +146,7 @@ class FlowAssistant(tk.Toplevel):
         fin.pack(fill="x", **pad)
         ttk.Button(fin, text="Görselleri + videoları render projesine aktar",
                    command=self.send_to_project).grid(row=0, column=0, sticky="w", padx=8, pady=6)
-        ttk.Label(fin, text="Ana pencerede proje klasörü (ör. prince_edit) seçili olmalı",
+        ttk.Label(fin, text="Ana pencerede proje klasörü (render proje klasörü) seçili olmalı",
                   foreground="#888").grid(row=0, column=1, sticky="w", padx=4)
 
         tip = ("İpucu: Konsola ilk kez yapıştırırken Chrome bir uyarı gösterir; "
@@ -114,7 +180,7 @@ class FlowAssistant(tk.Toplevel):
 
     # ------------------------------------------------------------ actions ---
     def choose_dir(self):
-        initial = PRINCE_DIR if PRINCE_DIR.exists() else Path.home()
+        initial = settings.base_dir() if settings.base_dir().exists() else Path.home()
         d = filedialog.askdirectory(title="Kaynak klasörü seç (içinde TIMELINE_MAP olan)",
                                     initialdir=str(initial), parent=self)
         if not d:
@@ -194,63 +260,45 @@ class FlowAssistant(tk.Toplevel):
 
     # ------------------------------------------------------- hikâye & harita ---
     def _build_story_tab(self, tab):
-        step = lambda r, text, cmd, hint: (
-            ttk.Button(tab, text=text, command=cmd).grid(row=r, column=0, sticky="w", padx=8, pady=3),
-            ttk.Label(tab, text=hint, foreground="#888").grid(row=r, column=1, sticky="w", padx=4))
-        ttk.Label(tab, text="Konu / fikir:").grid(row=0, column=0, sticky="nw", padx=8, pady=(8, 2))
-        self.topic_text = tk.Text(tab, height=3, width=60, wrap="word")
-        self.topic_text.grid(row=0, column=1, sticky="we", padx=4, pady=(8, 2))
-        step(1, "① Paket mesajını kopyala", self.copy_package_message,
-             f"claude.ai'ye {MOD}+V → gönder")
-        step(2, "② Paketi kaydet (panodan)", self.save_package,
-             "Claude'un cevabını kopyala, sonra bas → PAKET.md")
-        step(3, "③ Scripti kaydet (panodan)", self.save_script,
-             "Sadece script kısmını kopyala, sonra bas → SCRIPT.txt")
-        step(4, "④ HeyGen avatar videosunu seç", self.choose_avatar_video,
-             "HeyGen'den indirdiğin video → avatar.mp4 (süre otomatik ölçülür)")
-        step(5, "⑤ Harita mesajını kopyala", self.copy_map_message,
-             f"Script + avatar süresi + örnek harita → claude.ai'ye {MOD}+V")
-        step(6, "⑥ Haritayı kaydet ve kontrol et", self.save_map,
-             "Claude'un haritasını kopyala, sonra bas → TIMELINE_MAP.md")
-        ttk.Button(tab, text="Şablonları düzenle…", command=self.open_templates)\
-            .grid(row=7, column=0, sticky="w", padx=8, pady=(8, 6))
-        ttk.Label(tab, text="Claude'a verdiğin kendi mesajlarını sablonlar/ klasöründeki dosyalara yapıştırabilirsin.",
-                  foreground="#888").grid(row=7, column=1, sticky="w", padx=4)
+        info = ("Claude Code + Chrome ile: claude.ai sohbetinden 3 fikir → senin seçimin → paket ve script → "
+                "HeyGen avatarı → harita → kontrol. Ayarlar kullanıcıya özeldir (sohbet linki, avatar, klasör).")
+        ttk.Label(tab, text=info, foreground="#888", wraplength=700, justify="left")\
+            .grid(row=0, column=0, columnspan=2, sticky="w", padx=8, pady=(8, 4))
+        rows = [
+            ("Claude Code ile hikâye üret (/hikaye)", self.launch_claude_code,
+             "Claude aboneliğinle çalışır; API ücreti yok (opsiyonel)"),
+            ("Ayarlar…", self.open_settings, "Ana klasör, claude.ai sohbeti, mesajlar, HeyGen avatarı"),
+            ("Avatar videosunu seç (elle)", self.choose_avatar_video, "HeyGen'den indirdiğin video → avatar.mp4"),
+            ("Haritayı kontrol et", self.check_map, "Süre avatarla tutuyor mu, eksik prompt var mı"),
+        ]
+        for i, (text, cmd, hint) in enumerate(rows, start=1):
+            ttk.Button(tab, text=text, command=cmd).grid(row=i, column=0, sticky="w", padx=8, pady=3)
+            ttk.Label(tab, text=hint, foreground="#888").grid(row=i, column=1, sticky="w", padx=4)
         tab.columnconfigure(1, weight=1)
 
-    def _clipboard_text(self):
-        try:
-            return self.clipboard_get()
-        except tk.TclError:
-            return ""
+    def launch_claude_code(self):
+        import shutil
+        import subprocess
+        app_dir = str(settings.APP_DIR)
+        claude = shutil.which("claude")
+        if claude and IS_MAC:
+            cmd = f"cd {shlex_quote(app_dir)} && claude '/hikaye'"
+            subprocess.run(["osascript", "-e", f'tell application "Terminal" to do script "{cmd}"',
+                            "-e", 'tell application "Terminal" to activate'])
+            self.log("Claude Code Terminal'de /hikaye ile başlatıldı. Chrome bağlı değilse orada /chrome yaz.")
+        elif claude and IS_WINDOWS:
+            subprocess.Popen(["cmd", "/c", "start", "cmd", "/k", f'cd /d "{app_dir}" && claude "/hikaye"'])
+            self.log("Claude Code yeni pencerede /hikaye ile başlatıldı.")
+        else:
+            self._to_clipboard("/hikaye", "/hikaye komutu")
+            messagebox.showinfo(
+                "Claude Code",
+                "Claude Code'u bu klasörde aç:\n\n" + app_dir +
+                "\n\nSonra sohbete /hikaye yaz (panoya kopyalandı). VS Code eklentisinde Chrome için "
+                "mesaja @browser ekle.\n\nClaude Code kurulu değilse: claude.com/claude-code", parent=self)
 
-    def copy_package_message(self):
-        topic = self.topic_text.get("1.0", "end").strip()
-        if not topic:
-            messagebox.showwarning("Konu boş", "Önce konu / fikir kutusuna bir şey yaz.", parent=self)
-            return
-        self._to_clipboard(story_tools.package_message(topic), "Paket mesajı")
-
-    def _save_from_clipboard(self, name, what, min_len=50):
-        if not self._need_dir():
-            return None
-        text = self._clipboard_text()
-        if len(text.strip()) < min_len:
-            messagebox.showwarning("Pano boş", f"Önce Claude'un cevabından {what.lower()} kısmını kopyala.", parent=self)
-            return None
-        p = self.vid_dir / name
-        if p.exists() and not messagebox.askyesno("Üzerine yazılsın mı?", f"{name} zaten var. Değiştirilsin mi?", parent=self):
-            return None
-        story_tools.save_text(self.vid_dir, name, text)
-        self.log(f"💾 {what} kaydedildi: {p.name} ({len(text):,} karakter)")
-        self.refresh_status()
-        return p
-
-    def save_package(self):
-        self._save_from_clipboard(story_tools.PACKAGE_FILE, "Paket")
-
-    def save_script(self):
-        self._save_from_clipboard(story_tools.SCRIPT_FILE, "Script", min_len=200)
+    def open_settings(self):
+        SettingsDialog(self)
 
     def choose_avatar_video(self):
         if not self._need_dir() or self.busy:
@@ -274,54 +322,29 @@ class FlowAssistant(tk.Toplevel):
                 self.busy = False
         threading.Thread(target=work, daemon=True).start()
 
-    def copy_map_message(self):
+    def check_map(self):
         if not self._need_dir():
             return
         try:
-            text = story_tools.map_message(self.vid_dir)
-        except Exception as e:
-            messagebox.showwarning("Eksik adım", str(e), parent=self)
+            md = flow_tools.find_map(self.vid_dir)
+        except FileNotFoundError as e:
+            messagebox.showwarning("Harita yok", str(e), parent=self)
             return
-        self._to_clipboard(text, "Harita mesajı")
-
-    def save_map(self):
-        if not self._need_dir():
-            return
-        others = [m for m in self.vid_dir.glob("TIMELINE_MAP*.md") if m.name != story_tools.MAP_FILE]
-        p = self._save_from_clipboard(story_tools.MAP_FILE, "Harita", min_len=500)
-        if p is None:
-            return
-        if others:
-            self.log(f"⚠️ Klasörde başka harita da var ({', '.join(m.name for m in others)}); "
-                     "karışmasın diye onları taşı ya da sil.")
-        summary, problems = story_tools.validate_map(p, story_tools.avatar_seconds(self.vid_dir))
+        summary, problems = story_tools.validate_map(md, story_tools.avatar_seconds(self.vid_dir))
         if summary:
-            self.log(f"Harita: {summary}")
+            self.log(f"Harita ({md.name}): {summary}")
         if problems:
             for pr in problems:
                 self.log(f"❌ {pr}")
-            messagebox.showwarning("Haritada sorun var",
-                                   "\n\n".join("• " + x for x in problems) +
-                                   "\n\nBu hataları Claude'a yazıp haritayı düzelttir, sonra tekrar kaydet.", parent=self)
+            messagebox.showwarning("Haritada sorun var", "\n\n".join("• " + x for x in problems), parent=self)
         else:
             self.log("✅ Harita hazır — Flow sekmesine geçebilirsin.")
-        self.refresh_status()
-
-    def open_templates(self):
-        story_tools.TEMPLATES_DIR.mkdir(exist_ok=True)
-        import subprocess
-        if IS_MAC:
-            subprocess.run(["open", str(story_tools.TEMPLATES_DIR)])
-        elif IS_WINDOWS:
-            subprocess.run(["explorer", str(story_tools.TEMPLATES_DIR)])
-        else:
-            subprocess.run(["xdg-open", str(story_tools.TEMPLATES_DIR)])
 
     def send_to_project(self):
         if not self._need_dir():
             return
         if self.app.project_dir is None:
-            messagebox.showwarning("Proje seçilmedi", "Ana pencerede önce render proje klasörünü (ör. prince_edit) seç.",
+            messagebox.showwarning("Proje seçilmedi", "Ana pencerede önce render proje klasörünü (render proje klasörü) seç.",
                                    parent=self)
             return
         md = flow_tools.find_map(self.vid_dir)

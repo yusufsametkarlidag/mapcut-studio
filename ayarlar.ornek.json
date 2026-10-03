@@ -1,0 +1,13 @@
+{
+  "ana_klasor": "~/Desktop/Videolar",
+  "claude_sohbet_url": "https://claude.ai/chat/...",
+  "fikir_mesaji": "3 başlık fikir ver",
+  "harita_mesaji": "avatar seslendirmem {DK} dakika {SN} saniye, bir önceki videoda yaptığımız tarzda timeline map istiyorum",
+  "heygen": {
+    "avatar": "Avatarının adı (HeyGen > My Avatars)",
+    "ses": "Sesin adı",
+    "motion_engine": "Avatar III",
+    "cozunurluk": "1080p",
+    "otomatik_submit": true
+  }
+}

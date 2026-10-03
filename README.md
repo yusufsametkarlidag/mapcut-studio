@@ -129,10 +129,15 @@ istersen şu ortam değişkenleriyle elle belirtebilirsin: `MAPCUT_FFMPEG`,
 
 Ana penceredeki **Video Asistanı…** düğmesi, render'dan önceki adımları tek pencerede toplar:
 
-- **Hikâye & Harita sekmesi:** yeni `vidN` klasörü oluşturur; claude.ai'ye verilecek paket ve harita
-  mesajlarını hazırlar (`sablonlar/` klasöründeki şablonlardan); HeyGen avatar videosunu alıp süresini
-  ölçer; Claude'un yazdığı haritayı kaydedip kontrol eder (süre avatarla tutuyor mu, eksik görsel/video
-  promptu var mı, tablo düzgün mü).
+- **Hikâye & Harita sekmesi:**
+  - **Claude Code ile hikâye üret (/hikaye)** — opsiyonel. [Claude Code](https://claude.com/claude-code) ve
+    Claude in Chrome ile; normal Claude aboneliği yeterli, API ücreti yok. Claude Code, ayarlardaki claude.ai
+    sohbetinden 3 başlık fikri ister, seçtiğin fikrin paketini ve scriptini alır, HeyGen'de avatar videosunu
+    üretip indirir, avatar süresiyle haritayı aldırır ve kontrol eder. Talimatlar:
+    `.claude/skills/hikaye/SKILL.md`.
+  - **Ayarlar…** — kullanıcıya özel: ana klasör, claude.ai sohbet linki, fikir/harita mesajları, HeyGen
+    avatarı, ses ve motor (`ayarlar.json`; örnek: `ayarlar.ornek.json`).
+  - **Haritayı kontrol et** — süre avatarla tutuyor mu, eksik görsel/video promptu var mı, tablo düzgün mü.
 - **Flow sekmesi:** Google Flow için görsel ve video mesajlarını, otomatik devam kodunu
   (`flow/flow_oto_devam.js`) ve indirilen zip'lerin içe aktarılmasını yönetir.
 - **Render projesine aktar:** harita + avatar + görseller + videolar tek tuşla ana pencereye yüklenir.
